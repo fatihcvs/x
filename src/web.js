@@ -1,15 +1,15 @@
-// Web control panel (Faz 1 — first slice): stats, recent activity, pending
-// mentions and pause/resume, behind a single-password login. Runs inside the
-// bot process and is enabled only when DASHBOARD_PASSWORD is set. Composer
-// (posting) and mention-approval actions come in the next slice.
+// Web control panel (Faz 1): stats, recent activity, pending mentions,
+// pause/resume, a composer (generate/post tweet·trend·thread) and mention
+// approval — all behind a single-password login. Runs inside the bot process,
+// enabled only when DASHBOARD_PASSWORD is set.
 //
-// SECURITY: the panel can pause/resume the bot (and will post in later slices),
-// so always run it behind HTTPS in production (Railway gives HTTPS; on a bare
-// VPS put it behind a TLS reverse proxy).
+// SECURITY: the panel can post and reply on your behalf, so always run it behind
+// HTTPS in production (Railway gives HTTPS; on a bare VPS use a TLS reverse proxy).
 const crypto = require("crypto");
 const express = require("express");
 const config = require("../config");
 const db = require("./db");
+const compose = require("./compose");
 
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "";
 const SECRET = crypto.createHash("sha256").update(PASSWORD || "disabled").digest();
@@ -47,6 +47,8 @@ function passwordOk(input) {
   const b = Buffer.from(PASSWORD);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+const MODES = new Set(["manual", "trend", "thread"]);
 
 function buildApp() {
   const app = express();
@@ -88,26 +90,81 @@ function buildApp() {
     });
   });
 
-  app.get("/api/activity", (_req, res) =>
-    res.json({ posts: db.recentPosts(20) })
-  );
-
-  app.get("/api/pending", (_req, res) =>
-    res.json({ pending: db.listPending() })
-  );
+  app.get("/api/activity", (_req, res) => res.json({ posts: db.recentPosts(20) }));
+  app.get("/api/pending", (_req, res) => res.json({ pending: db.listPending() }));
 
   app.post("/api/pause", (_req, res) => {
     db.setMeta("paused", "1");
     res.json({ ok: true, paused: true });
   });
-
   app.post("/api/resume", (_req, res) => {
     db.setMeta("paused", "0");
     res.json({ ok: true, paused: false });
   });
 
-  app.get("/", (_req, res) => res.type("html").send(PAGE));
+  // Composer: generate a draft (no posting), then post it.
+  app.post("/api/generate", async (req, res) => {
+    const mode = (req.body && req.body.mode) || "";
+    const topic =
+      req.body && req.body.topic ? String(req.body.topic).trim() : null;
+    if (!MODES.has(mode)) return res.status(400).json({ ok: false, error: "Geçersiz mod" });
+    try {
+      const content = await compose.generateContent(mode, topic || null);
+      if (!content) {
+        return res.json({
+          ok: false,
+          error: mode === "trend" ? "Uygun/güvenli trend bulunamadı." : "Üretilemedi.",
+        });
+      }
+      res.json({ ok: true, content });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
 
+  app.post("/api/post", async (req, res) => {
+    const content = req.body && req.body.content;
+    if (!content || (!content.text && !Array.isArray(content.parts))) {
+      return res.status(400).json({ ok: false, error: "İçerik yok" });
+    }
+    try {
+      const count = await compose.postContent(content);
+      res.json({ ok: true, count });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Mention approval: approve | edit | reject.
+  app.post("/api/pending/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const action = (req.body && req.body.action) || "";
+    const pending = db.getPendingById(id);
+    if (!pending || pending.status !== "pending") {
+      return res.status(404).json({ ok: false, error: "Bulunamadı veya zaten işlenmiş" });
+    }
+    try {
+      if (action === "reject") {
+        db.setPendingStatus(id, "skipped");
+        return res.json({ ok: true, status: "skipped" });
+      }
+      if (action === "approve" || action === "edit") {
+        const text =
+          action === "edit"
+            ? String((req.body && req.body.text) || "").slice(0, 280)
+            : pending.draft;
+        if (!text) return res.status(400).json({ ok: false, error: "Boş cevap" });
+        const r = await compose.sendReply(pending, text);
+        if (!r.ok) return res.status(400).json({ ok: false, error: r.reason });
+        return res.json({ ok: true, status: "sent" });
+      }
+      res.status(400).json({ ok: false, error: "Geçersiz aksiyon" });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get("/", (_req, res) => res.type("html").send(PAGE));
   return app;
 }
 
@@ -138,12 +195,14 @@ const PAGE = `<!doctype html>
 .badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}.badge.warn{background:rgba(245,158,11,.15);color:var(--warn)}
 button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
 button.ghost{background:transparent;border:1px solid var(--bd);color:var(--fg)}button:disabled{opacity:.5;cursor:default}
-input{background:#0b0d12;border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:10px 12px;font-size:15px;width:100%}
+input,select,textarea{background:#0b0d12;border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:10px 12px;font-size:15px}
+input,textarea{width:100%}select{flex:0 0 auto}
 .list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .item{border:1px solid var(--bd);border-radius:8px;padding:10px 12px}
 .item .meta{color:var(--mut);font-size:12px;margin-bottom:4px}.muted{color:var(--mut)}
 h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px}
 .hidden{display:none}.err{color:var(--danger);font-size:14px;min-height:18px}
+.pre{white-space:pre-wrap}
 </style></head><body><div class="wrap">
 <div id="login" class="card hidden">
 <h1>🤖 Co-pilot Panel</h1><p class="muted">Devam etmek için şifre gir.</p>
@@ -159,6 +218,19 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
 <div class="row"><button id="pauseBtn" class="ghost">⏸️ Duraklat</button>
 <button id="resumeBtn" class="ghost">▶️ Devam</button><span class="sp"></span>
 <button id="refreshBtn" class="ghost">↻ Yenile</button><button id="logoutBtn" class="ghost">Çıkış</button></div>
+
+<h2>Yeni içerik</h2>
+<div class="card">
+<div class="row"><select id="mode">
+<option value="manual">Tweet</option><option value="trend">Trend tweet</option><option value="thread">Thread</option>
+</select><input id="topic" placeholder="Konu (opsiyonel)" /><button id="genBtn">Üret</button></div>
+<div class="err" id="genErr"></div>
+<div id="preview" class="hidden">
+<div id="previewBody" class="item pre" style="margin-top:10px"></div>
+<div class="row" style="margin-top:8px"><button id="sendBtn">✅ Gönder</button>
+<button id="regenBtn" class="ghost">🔄 Yeniden</button><button id="cancelBtn" class="ghost">❌ İptal</button></div>
+</div></div>
+
 <h2>Bekleyen mention'lar</h2><div id="pending" class="list"></div>
 <h2>Son aktivite</h2><div id="activity" class="list"></div>
 </div></div>
@@ -167,6 +239,9 @@ const $=s=>document.querySelector(s);
 const api=(p,o)=>fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o));
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const show=id=>{$('#login').classList.toggle('hidden',id!=='login');$('#dash').classList.toggle('hidden',id!=='dash');};
+let draft=null;
+function renderContent(c){return c.parts?c.parts.map((p,i)=>(i+1)+'. '+esc(p)).join('\\n\\n'):esc(c.text);}
+
 async function load(){
   const r=await api('/api/stats');
   if(r.status===401){show('login');return;}
@@ -177,9 +252,32 @@ async function load(){
   const st=$('#status');st.textContent=s.paused?'duraklatılmış':'aktif';st.className='badge '+(s.paused?'warn':'ok');
   $('#pauseBtn').disabled=s.paused;$('#resumeBtn').disabled=!s.paused;
   const [pa,ac]=await Promise.all([api('/api/pending').then(x=>x.json()),api('/api/activity').then(x=>x.json())]);
-  $('#pending').innerHTML=pa.pending.length?pa.pending.map(p=>'<div class="item"><div class="meta">@'+esc(p.author)+'</div>'+esc(p.mention_text)+'<div class="muted" style="margin-top:6px">🤖 '+esc(p.draft)+'</div></div>').join(''):'<div class="muted">Bekleyen yok.</div>';
+  $('#pending').innerHTML=pa.pending.length?pa.pending.map(p=>'<div class="item"><div class="meta">@'+esc(p.author)+'</div>'+esc(p.mention_text)+'<div class="muted pre" style="margin-top:6px">🤖 '+esc(p.draft)+'</div><div class="row" style="margin-top:8px"><button data-id="'+p.id+'" data-act="approve">✅ Gönder</button><button class="ghost" data-id="'+p.id+'" data-act="reject">❌ Geç</button></div></div>').join(''):'<div class="muted">Bekleyen yok.</div>';
+  document.querySelectorAll('#pending button[data-id]').forEach(b=>{b.onclick=()=>act(Number(b.dataset.id),b.dataset.act);});
   $('#activity').innerHTML=ac.posts.length?ac.posts.map(p=>'<div class="item"><div class="meta">'+(p.kind==='tweet'?'📤 tweet':'💬 cevap')+' · '+new Date(p.at).toLocaleString('tr-TR')+'</div>'+esc(p.text)+'</div>').join(''):'<div class="muted">Henüz yok.</div>';
 }
+window.act=async(id,action)=>{const r=await api('/api/pending/'+id,{method:'POST',body:JSON.stringify({action})});const j=await r.json();if(!j.ok)alert(j.error||'Hata');load();};
+
+async function generate(){
+  $('#genErr').textContent='';$('#preview').classList.add('hidden');draft=null;
+  $('#genBtn').disabled=true;$('#genBtn').textContent='Üretiliyor...';
+  try{
+    const r=await api('/api/generate',{method:'POST',body:JSON.stringify({mode:$('#mode').value,topic:$('#topic').value})});
+    const j=await r.json();
+    if(!j.ok){$('#genErr').textContent=j.error||'Üretilemedi.';return;}
+    draft=j.content;$('#previewBody').innerHTML=renderContent(draft);$('#preview').classList.remove('hidden');
+  }catch(e){$('#genErr').textContent='Hata: '+e.message;}
+  finally{$('#genBtn').disabled=false;$('#genBtn').textContent='Üret';}
+}
+$('#genBtn').onclick=generate;$('#regenBtn').onclick=generate;
+$('#cancelBtn').onclick=()=>{$('#preview').classList.add('hidden');draft=null;};
+$('#sendBtn').onclick=async()=>{
+  if(!draft)return;$('#sendBtn').disabled=true;
+  const r=await api('/api/post',{method:'POST',body:JSON.stringify({content:draft})});const j=await r.json();
+  $('#sendBtn').disabled=false;
+  if(!j.ok){$('#genErr').textContent=j.error||'Gönderilemedi.';return;}
+  draft=null;$('#preview').classList.add('hidden');$('#topic').value='';load();
+};
 $('#loginBtn').onclick=async()=>{$('#loginErr').textContent='';const r=await api('/api/login',{method:'POST',body:JSON.stringify({password:$('#pw').value})});if(r.ok){$('#pw').value='';load();}else{$('#loginErr').textContent='Hatalı şifre.';}};
 $('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click();});
 $('#pauseBtn').onclick=async()=>{await api('/api/pause',{method:'POST'});load();};

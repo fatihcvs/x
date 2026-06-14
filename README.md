@@ -109,11 +109,12 @@ senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
 (varsayılan port 3000, `PORT` ile değiştirilir). Tarayıcıdan `http://SUNUCU:PORT`:
 - Şifreyle giriş; bugünkü tweet/cevap sayıları, **son aktivite**, **bekleyen
   mention'lar** ve **⏸️ Duraklat / ▶️ Devam**.
-- `DASHBOARD_PASSWORD` boşsa panel kapalıdır. Panel botu kontrol ettiği için
-  **mutlaka HTTPS arkasında** çalıştır (Railway HTTPS verir; düz VPS'te TLS reverse proxy).
+- **Composer:** panelden tweet / trend tweet / thread üret → önizle → 🔄 yeniden / ✅ gönder.
+- **Mention onayı:** bekleyen mention'ları panelden ✅ Gönder / ❌ Geç.
+- `DASHBOARD_PASSWORD` boşsa panel kapalıdır. Panel senin adına paylaşım/cevap
+  yapabildiği için **mutlaka HTTPS arkasında** çalıştır (Railway HTTPS verir).
 
-> Composer (panelden tweet/thread üret-gönder), mention onay aksiyonları ve ayar
-> düzenleme bir sonraki dilimde gelecek.
+> Ayar düzenleme (persona/model/saatler) bir sonraki dilimde gelecek.
 
 ## Ayarlar — sadece `config.js`
 - `model` — içeriği yazan Claude modeli. Varsayılan `claude-sonnet-4-6` (çok iyi

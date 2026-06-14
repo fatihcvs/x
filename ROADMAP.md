@@ -44,6 +44,7 @@ GitHub'da (`fatihcvs/x`, `main`):
 | 11 | **Akıllı oto-cevap:** mention'ları auto/review/skip diye sınıflar; sadece açıkça güvenli olanlara otomatik cevap verir, gerisi onaya düşer. | ✅ |
 | 12 | **Kalıcı hafıza (veritabanı):** `data.json` → yerleşik **SQLite** (`node:sqlite`, `data.db`); aynı arayüz, otomatik göç. Geçmiş artık sorgulanabilir bir DB'de. | ✅ |
 | 13 | **Web kontrol paneli (ilk dilim):** Express + şifreli giriş + dashboard (istatistik, son aktivite, bekleyen mention'lar, ⏸️/▶️). | ✅ |
+| 14 | **Panel composer + mention onayı:** panelden tweet/trend/thread üret→önizle→gönder; bekleyen mention'ları ✅/❌. Ortak içerik servisi `src/compose.js`. | ✅ |
 
 **Bugünkü teknoloji:** Node.js (CommonJS) tek süreç · `@anthropic-ai/sdk` ·
 `twitter-api-v2` · `node-telegram-bot-api` · `node-cron` · `dotenv`. Durum yerleşik
@@ -81,9 +82,10 @@ Her şey bunun üstüne kurulacak; önce gerçekten çalıştığını görelim.
 
 ### Faz 1 — Kişisel tam kontrol paneli (web) 🔧 *devam ediyor*
 Amaç: botu tarayıcıdan, görsel bir panelden yönetmek (Telegram'ı tamamlar).
-**İlk dilim ✅:** Express sunucu + şifreli giriş (`DASHBOARD_PASSWORD`) + dashboard
-(bugünkü istatistik, son aktivite, bekleyen mention'lar, ⏸️/▶️ duraklat/devam).
-**Kalan:** composer (üret→önizle→onayla→gönder), mention onay aksiyonları, ayar düzenleme.
+**Yapıldı ✅:** Express sunucu + şifreli giriş + dashboard (istatistik, son aktivite,
+bekleyen mention'lar, ⏸️/▶️); **composer** (tweet/trend/thread üret→önizle→gönder);
+**mention onayı** (panelden ✅/❌). Ortak içerik servisi `src/compose.js`.
+**Kalan:** ayar düzenleme (persona/model/saatler/flag'ler) — `config.js` override katmanı.
 1. **Web sunucusu:** Express ekle, bota entegre başlat (`PORT` env). Tek
    sayfalık arayüz + JSON API.
 2. **Güvenlik:** tek şifreli giriş (`DASHBOARD_PASSWORD`), imzalı oturum çerezi;
@@ -180,8 +182,10 @@ ve nereye gittiğimiz dökümana bakınca daima güncel görünür.
 
 ## 8. Sıradaki somut adım
 
-1. **Faz 0:** `.env`'i doldur, botu canlı çalıştır, kaliteyi doğrula.
-2. **Faz 1'e başla:** Express + şifreli giriş iskeleti → `/api/stats` ve basit
-   dashboard → sonra composer ve mention onayı → sonra ayar düzenleme.
+1. **Faz 0:** `.env`'i doldur (`ANTHROPIC_API_KEY`, X/Telegram, `DASHBOARD_PASSWORD`),
+   botu çalıştır, paneli aç.
+2. **Faz 1 — son dilim:** panele **ayar düzenleme** ekle (persona/model/saatler/
+   flag'ler) — `config.js` üstüne `data.db`'de bir override katmanı.
+3. Ardından **Faz 2** (çok platform) planına geç.
 
-> Onay verdiğinde Faz 1'i bu sıralamayla, parça parça kurmaya başlarım.
+> Composer + mention onayı dahil panel hazır ve test edildi.
