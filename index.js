@@ -30,7 +30,7 @@ const { notify } = require("./src/telegram");
       "🤖 Co-pilot çalışıyor.\n" +
         "• Tweet'ler otomatik (uygun trend varsa ona göre)\n" +
         "• Mention'lar onayına gelir\n" +
-        "• Komutlar: /tweet, /tweet <konu>, /trend"
+        "• Komutlar: /tweet, /tweet <konu>, /trend, /help"
     );
     console.log("[startup] running.");
   } catch (e) {

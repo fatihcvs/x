@@ -204,6 +204,30 @@ bot.onText(/^\/trend(?:@\w+)?\s*$/, (msg) => {
   startDraft("trend", null);
 });
 
+// /help or /start — list the available commands
+const HELP =
+  "🤖 Co-pilot komutları:\n\n" +
+  "/tweet — rastgele formatla bir tweet taslağı üret\n" +
+  "/tweet <konu> — verdiğin konu/ipucu etrafında taslak üret\n" +
+  "/trend — uygun (hafif/güvenli) bir Türkiye trendine göre taslak üret\n" +
+  "/help — bu mesajı göster\n\n" +
+  "Her taslakta ✅ Gönder / 🔄 Yeniden üret / ❌ İptal butonları gelir.\n" +
+  "Mention'lar ayrıca otomatik olarak onayına düşer (komut gerekmez).";
+
+bot.onText(/^\/(help|start)(?:@\w+)?\s*$/, (msg) => {
+  if (!isOwner(msg)) return;
+  notify(HELP);
+});
+
+// Register the commands so they show up in Telegram's "/" menu for discovery.
+bot
+  .setMyCommands([
+    { command: "tweet", description: "Tweet taslağı üret (konu opsiyonel)" },
+    { command: "trend", description: "Uygun Türkiye trendine göre taslak üret" },
+    { command: "help", description: "Komutları göster" },
+  ])
+  .catch(() => {});
+
 // ===================================================================
 //  Telegram event handlers
 // ===================================================================

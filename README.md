@@ -88,6 +88,7 @@ En ucuz iki yol:
 - **`/tweet`** — persona + rastgele formatla bir tweet taslağı üretir.
 - **`/tweet <konu>`** — verdiğin konu/ipucu etrafında taslak üretir.
 - **`/trend`** — o an uygun (hafif/güvenli) bir Türkiye trendine göre taslak üretir.
+- **`/help`** — komut listesini gösterir (komutlar Telegram'ın `/` menüsünde de görünür).
 
 Her taslakta **✅ Gönder / 🔄 Yeniden üret / ❌ İptal** butonları gelir. Gönderilen
 manuel tweet'ler de günlük limite (`maxTweetsPerDay`) dahildir. Komutlar yalnızca
