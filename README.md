@@ -5,8 +5,9 @@ X (Twitter) hesabını büyütmek için AI asistanı. İçerik **Anthropic (Clau
 - **Tweet'ler:** tam otomatik. Geniş kitleye hitap eden, etkileşim/büyüme odaklı,
   her seferinde farklı formatta (rotasyon) özgün tweet'ler üretir ve belirlediğin
   saatlerde atar.
-- **Mention'lar:** otomatik DEĞİL. Biri yazınca AI cevap taslağı hazırlar, Telegram'a
-  düşer. **✅ Gönder** / **❌ Geç**. Mesajı yanıtlayıp kendi metnini de yollayabilirsin.
+- **Mention'lar:** AI cevap taslağı hazırlar; çoğu Telegram'da onayına düşer
+  (**✅ Gönder** / **❌ Geç**, ya da yanıtlayıp kendi metnini yolla). Açıkça
+  dostça/zararsız olanlara — ayar açıksa — insan onayı olmadan otomatik cevap verir.
 - **Beğeni / takip yok:** hesap ban'ını tetikleyen kısım bu, bilerek eklenmedi.
 - **Manuel içerik:** Telegram'dan `/tweet`, `/tweet <konu>`, `/trend` veya
   `/thread <konu>` ile istediğin an taslak üret → **✅ Gönder / 🔄 Yeniden üret / ❌ İptal**.
@@ -123,6 +124,9 @@ senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
 - `digestCron` — her gün bu saatte (timezone'a göre) Telegram'a günlük özet
   (bugün kaç tweet/cevap, aktif mi) gönderir. Varsayılan 23:00; kapatmak için sil.
 - `maxTweetsPerDay` / `maxRepliesPerDay` — güvenli sınırlar.
+- `autoReplySafeMentions` — `true` ise açıkça dostça/zararsız mention'lara insan
+  onayı olmadan otomatik cevap verilir (linkli mention'lar ve günlük cevap limiti
+  hariç). Diğer tüm mention'lar yine onaya düşer. `false` = her cevap onaylı.
 - `trendsEnabled` — `true` ise zamanlanmış tweet'ler uygun bir **Türkiye trendine**
   bağlanır (hassas konular atlanır); uygun trend yoksa normal tweet atılır. `/trend`
   komutu da bu mantığı kullanır. Kapatmak için `false` yap.

@@ -220,28 +220,49 @@ async function generateThread(topic = null, recent = [], context = [], learnings
     .slice(0, 6);
 }
 
-// Draft a reply to a mention. `recent` (your last tweets) is used so the reply
-// keeps your voice. May return "SKIP" for low-value mentions.
-async function draftReply(mention, recent = []) {
+// Draft a reply to a mention AND triage it. Returns { action, reply }:
+//   "skip"   -> not worth replying (spam/noise)
+//   "auto"   -> clearly friendly/benign; safe to send without human review
+//   "review" -> anything sensitive/uncertain; needs human approval
+// `recent` (your last tweets) keeps the reply in your voice.
+async function triageMention(mention, recent = []) {
   const voice = recent.length
     ? `\n\nSenin son tweet'lerin (aynı sese/ağıza sadık kal, kopyalama):\n` +
       recent.slice(0, 5).map((t) => `- ${t}`).join("\n")
     : "";
-  const skipNote = config.skipLowValueMentions
-    ? `\nBu mention cevaba değmezse (spam, tek emoji, anlamsız) sadece "SKIP" yaz.`
-    : "";
 
   const user =
     `@${mention.author} sana şöyle yazdı:\n\n"${mention.text}"\n\n` +
-    `Gerçek bir insan gibi, doğal ve kısa bir cevap yaz. Mention'ın tonuna uy ` +
-    `(şakaysa şakayla gir, samimiyse samimi). Robot gibi, fazla kibar ya da ` +
-    `açıklayıcı olma. 280 karakteri geçme, link ekleme. Sadece cevabın metnini ver.` +
-    voice +
-    skipNote;
+    "1) Gerçek bir insan gibi, doğal ve kısa bir cevap yaz. Mention'ın tonuna uy " +
+    "(şakaysa şakayla, samimiyse samimi). Robot/fazla kibar olma. ≤280, link yok.\n" +
+    "2) Sonra şu kararı ver:\n" +
+    "   AUTO = mention açıkça dostça/zararsız (övgü, teşekkür, basit pozitif, emoji) " +
+    "ve cevabın tamamen güvenli/genel; insan onayı olmadan gönderilebilir.\n" +
+    "   REVIEW = en ufak tartışma, soru, eleştiri, hassasiyet, belirsizlik ya da " +
+    "riskli olma ihtimali varsa.\n" +
+    "   SKIP = cevaba değmez (spam, tek emoji, anlamsız).\n" +
+    "ÇIKTI BİÇİMİ: İLK satır yalnızca AUTO, REVIEW ya da SKIP. Sonraki satır(lar) cevap metni." +
+    voice;
 
-  const reply = clean(await chat(systemPrompt(), user));
-  if (reply.toUpperCase() === "SKIP") return "SKIP";
-  return clip(reply);
+  const raw = (await chat(systemPrompt(), user)).trim();
+  const nl = raw.indexOf("\n");
+  const tag = (nl === -1 ? raw : raw.slice(0, nl)).trim().toUpperCase();
+  const body = nl === -1 ? "" : raw.slice(nl + 1);
+
+  if (tag.startsWith("SKIP")) return { action: "skip", reply: "" };
+
+  // If the model didn't follow the format, treat the whole output as a reply
+  // that needs review — never auto-send an unparsed response.
+  const known = tag.startsWith("AUTO") || tag.startsWith("REVIEW");
+  const reply = clip(clean(known ? body.trim() : raw));
+  if (!reply) return { action: "skip", reply: "" };
+  return { action: tag.startsWith("AUTO") ? "auto" : "review", reply };
 }
 
-module.exports = { chat, generateTweet, generateTrendTweet, generateThread, draftReply };
+module.exports = {
+  chat,
+  generateTweet,
+  generateTrendTweet,
+  generateThread,
+  triageMention,
+};

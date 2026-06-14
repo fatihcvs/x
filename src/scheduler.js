@@ -72,14 +72,29 @@ async function runMentionJob() {
       db.setMeta("last_mention_id", m.id); // advance even if we skip
       if (db.mentionSeen(m.id)) continue;
 
-      const draft = await ai.draftReply(m, db.recentTweets());
-      if (draft === "SKIP") continue;
+      const triage = await ai.triageMention(m, db.recentTweets());
+      if (triage.action === "skip") continue;
 
+      // Auto-reply only to clearly safe mentions (no links), within the cap.
+      const hasLink = /https?:\/\//i.test(m.text || "");
+      if (
+        config.autoReplySafeMentions &&
+        triage.action === "auto" &&
+        !hasLink &&
+        db.countToday("reply") < config.maxRepliesPerDay
+      ) {
+        await x.replyTo(m.id, triage.reply);
+        db.logPost("reply", triage.reply);
+        notify(`🤖 Otomatik cevap (@${m.author}):\n"${triage.reply}"`);
+        continue;
+      }
+
+      // Otherwise: human approval via Telegram.
       db.addPending({
         mention_id: m.id,
         mention_text: m.text,
         author: m.author,
-        draft,
+        draft: triage.reply,
         tg_message_id: null,
       });
       const pending = db.getPendingByMentionId(m.id);

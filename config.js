@@ -110,4 +110,10 @@ BÜYÜME İÇİN İYİ TWEET PRENSİPLERİ:
   maxTweetsPerDay: 6,
   maxRepliesPerDay: 20,
   skipLowValueMentions: true,
+
+  // Açıkça dostça/zararsız mention'lara İNSAN ONAYI OLMADAN otomatik cevap ver.
+  // (Linkli mention'lar ve diğer her şey yine Telegram'da onayına gelir.) Daha
+  // fazla otomasyon ama "tüm cevaplar insan onaylı" kuralını gevşetir — kapatmak
+  // için false.
+  autoReplySafeMentions: true,
 };
