@@ -7,3 +7,6 @@ data.db*
 # local packaging artifacts
 ai-twitter-copilot.zip
 _tmp_extract/
+
+# unrelated nested project (its own git repo — must not be tracked here)
+publishbot-inspect/
