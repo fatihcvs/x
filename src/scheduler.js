@@ -14,24 +14,32 @@ async function runTweetJob() {
     }
     const recent = db.recentTweets();
 
-    // Ride a safe, broad trend when one is available; otherwise post normally.
-    let tweet = null;
-    let viaTrend = false;
+    // Read the room first: current Türkiye trends + news context. Used to ride
+    // a safe trend when there's a good one, and as background awareness so even
+    // normal tweets feel timely (not forced onto a trend).
+    let trends = [];
     if (config.trendsEnabled) {
       try {
-        const trends = await getEnrichedTrends();
-        if (trends.length) {
-          const t = await ai.generateTrendTweet(trends, recent);
-          if (t) {
-            tweet = t;
-            viaTrend = true;
-          }
-        }
+        trends = await getEnrichedTrends();
       } catch {
-        /* trend path is best-effort; fall back to a normal tweet */
+        /* best-effort; trends stay empty */
       }
     }
-    if (!tweet) tweet = await ai.generateTweet(recent);
+
+    let tweet = null;
+    let viaTrend = false;
+    if (trends.length) {
+      try {
+        const t = await ai.generateTrendTweet(trends, recent);
+        if (t) {
+          tweet = t;
+          viaTrend = true;
+        }
+      } catch {
+        /* trend writing failed; fall back to a normal tweet below */
+      }
+    }
+    if (!tweet) tweet = await ai.generateTweet(recent, null, trends);
 
     await x.postTweet(tweet);
     db.logPost("tweet", tweet);
@@ -52,7 +60,7 @@ async function runMentionJob() {
       db.setMeta("last_mention_id", m.id); // advance even if we skip
       if (db.mentionSeen(m.id)) continue;
 
-      const draft = await ai.draftReply(m);
+      const draft = await ai.draftReply(m, db.recentTweets());
       if (draft === "SKIP") continue;
 
       db.addPending({
@@ -71,11 +79,12 @@ async function runMentionJob() {
 }
 
 function start() {
-  config.tweetSchedule.forEach((expr) => cron.schedule(expr, runTweetJob));
-  cron.schedule(config.mentionPollCron, runMentionJob);
+  const opts = config.timezone ? { timezone: config.timezone } : {};
+  config.tweetSchedule.forEach((expr) => cron.schedule(expr, runTweetJob, opts));
+  cron.schedule(config.mentionPollCron, runMentionJob, opts);
   console.log(
-    `[scheduler] ${config.tweetSchedule.length} tweet slot(s), ` +
-      `mentions every: ${config.mentionPollCron}`
+    `[scheduler] ${config.tweetSchedule.length} tweet slot(s) ` +
+      `(${config.timezone || "server time"}), mentions every: ${config.mentionPollCron}`
   );
 }
 

@@ -4,9 +4,13 @@
 
 module.exports = {
   // --- Which OpenAI model writes your content -------------------------
-  // gpt-4o-mini -> cheap, reliable, great for tweets (default)
-  // gpt-5.4-mini / gpt-5.4 -> newer, higher quality, costs more
-  model: "gpt-4o-mini",
+  // Daha güçlü model = daha insani, daha kaliteli tweet (büyüme için önerilir).
+  // Kod model-bağımsızdır: token parametresini otomatik ayarlar, bu yüzden bu
+  // değeri istediğin modelle değiştirebilirsin (kod düzenlemeye gerek yok).
+  //   gpt-4o      -> güçlü, doğal yazım (varsayılan, önerilen)
+  //   gpt-4o-mini -> en ucuz, idare eder
+  //   daha yeni bir model (hesabında varsa) -> sadece adını buraya yaz
+  model: "gpt-4o",
 
   // --- Your Kick channel ----------------------------------------------
   kickUsername: "thepublisher",
@@ -36,6 +40,22 @@ BÜYÜME İÇİN İYİ TWEET PRENSİPLERİ:
 - 280 karakteri ASLA geçme. Cringe, "fellow kids", zorlama mizah YOK.
 `.trim(),
 
+  // --- Growth goal & influencer style --------------------------------
+  // The long game: turn this into a high-follower, real influencer account.
+  // Every tweet should serve this — broad appeal, engagement, shareability.
+  accountGoal:
+    "Bu hesabı uzun vadede yüksek takipçili, gerçek bir influencer hesabına " +
+    "dönüştürmek. Her tweet bu hedefe hizmet etmeli: geniş kitle, yüksek etkileşim " +
+    "(alıntı/repost/yorum/kaydetme), paylaşılabilirlik ve takip ettirme.",
+
+  // Style references: the model emulates the *vibe and quality* of these from
+  // its own knowledge — it does NOT copy them. Gerçek @handle de yazabilirsin.
+  referenceInfluencers: [
+    "kısa ve vurucu 'hot take' atan popüler Türk Twitter hesapları",
+    "günlük hayat gözlemiyle viral olan relatable mizah hesapları",
+    "zekice gönderme/espri yapan, alıntılatan hesaplar",
+  ],
+
   // --- Tweet style rotation -------------------------------------------
   // The bot picks ONE of these at random each time so it never gets samey.
   tweetStyles: [
@@ -60,18 +80,22 @@ BÜYÜME İÇİN İYİ TWEET PRENSİPLERİ:
   // nothing suitable is found, a normal tweet is posted instead.
   trendsEnabled: true,
 
-  // --- Normal tweets (no link) ----------------------------------------
+  // --- When to auto-post (Türkiye peak hours) -------------------------
+  // Saatler aşağıdaki `timezone`'a göre yorumlanır; sunucu UTC olsa bile
+  // tweet'ler TR saatinde atılır. TR'nin yüksek etkileşim saatlerine yayıldı.
+  timezone: "Europe/Istanbul",
   tweetSchedule: [
-    "0 12 * * *", // 12:00
-    "0 17 * * *", // 17:00
-    "0 21 * * *", // 21:00
+    "0 9 * * *", // 09:00 — sabah
+    "30 12 * * *", // 12:30 — öğle
+    "30 19 * * *", // 19:30 — akşam (zirve)
+    "30 22 * * *", // 22:30 — gece scroll (zirve)
   ],
 
   // --- Mention checking -----------------------------------------------
   mentionPollCron: "*/15 * * * *", // every 15 minutes
 
   // --- Safety caps (human, ban-safe pace) -----------------------------
-  maxTweetsPerDay: 5,
+  maxTweetsPerDay: 6,
   maxRepliesPerDay: 20,
   skipLowValueMentions: true,
 };

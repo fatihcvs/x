@@ -3,19 +3,75 @@ const config = require("../config");
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// One chat call. NOTE: gpt-4o / gpt-4.x models use `max_tokens`.
-// If you switch to a GPT-5.x model, change it to `max_completion_tokens`.
+// One chat call. Model-agnostic: newer models want `max_completion_tokens`,
+// older gpt-4.x want `max_tokens` — try the modern param, fall back if rejected.
+// So you can change config.model freely without touching code.
+const MAX_OUT = 500;
 async function chat(system, user) {
-  const res = await client.chat.completions.create({
+  const base = {
     model: config.model,
-    max_tokens: 300,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-  });
-  return (res.choices?.[0]?.message?.content || "").trim();
+  };
+  try {
+    const res = await client.chat.completions.create({
+      ...base,
+      max_completion_tokens: MAX_OUT,
+    });
+    return (res.choices?.[0]?.message?.content || "").trim();
+  } catch (e) {
+    if (!/max_completion_tokens|max_tokens|unsupported|unknown|parameter/i.test(e.message || "")) {
+      throw e;
+    }
+    const res = await client.chat.completions.create({ ...base, max_tokens: MAX_OUT });
+    return (res.choices?.[0]?.message?.content || "").trim();
+  }
 }
+
+// Shared "write like a real person" guide, layered on top of the user's
+// persona for EVERY tweet and reply. This is the main lever against the
+// "AI smell": think first, then write specific, natural Turkish with a voice.
+const HUMAN_GUIDE = `
+
+--- GERÇEK İNSAN GİBİ YAZ (her tweet/cevap için) ---
+Sen zeki, esprili, gerçek bir Türk kullanıcısısın; yapay zeka değil.
+ÖNCE kafanda düşün (YAZMA): bugün millet neyi konuşuyor, hangi açı taze,
+gerçek biri şu an ne atardı? SONRA sadece final metni ver.
+
+YAP:
+- Spesifik ol: somut, tanıdık bir an/detay. Herkesin diyebileceği genel laf değil.
+- Doğal günlük Türkçe; yeri gelince küçük harf, eksiltili cümle olabilir.
+- Tek net fikir, kısa ve vurucu, ilk kelimelerde yakala. Kendi tavrın/görüşün olsun.
+
+YAPMA (yapay zeka kokusu):
+- Klişe/motivasyon ("hayat işte", "bazen", "unutma ki"), zorlama kelime oyunu.
+- Aşırı parlak/simetrik kurgu, "X değil Y" kalıbı, ders verme/açıklama tonu.
+- Gereksiz emoji (en fazla 1, gerçekten gerekiyorsa), zorlama hashtag, süslü tire (—).`;
+
+const systemPrompt = () => config.persona + HUMAN_GUIDE;
+
+// Extra strategy layer for ORIGINAL tweets (not replies): write with the
+// instincts of a successful Türk Twitter influencer, aimed at follower growth.
+function growthBlock() {
+  const refs = (config.referenceInfluencers || []).filter(Boolean);
+  const refLine = refs.length
+    ? "\nTarz referansı (TAKLİT etme; kaliteyi/enerjiyi yakala): " +
+      refs.join("; ") +
+      "."
+    : "";
+  return (
+    "\n\n--- BÜYÜME HEDEFİ ---\n" +
+    (config.accountGoal ? config.accountGoal + "\n" : "") +
+    "Başarılı Türk Twitter influencer'larının mantığıyla düşün: güçlü hook, " +
+    "netlik, doğru zamanlama, alıntılatan/yorumlatan açı, yüksek paylaşılabilirlik. " +
+    "Takipçi kazandıracak, 'bunu ben de yaşadım, paylaşayım' dedirtecek tweet üret." +
+    refLine
+  );
+}
+
+const tweetSystem = () => systemPrompt() + growthBlock();
 
 // --- Shared helpers ---------------------------------------------------
 function pickStyle() {
@@ -32,27 +88,48 @@ function avoidBlock(recent = []) {
     : "";
 }
 
+// Compact "what's happening on X in Türkiye right now" background. Optional
+// awareness for normal tweets — the model may use it to feel timely, but is
+// explicitly told NOT to force it. Accepts enriched trends or plain strings.
+function agendaBlock(trends) {
+  const items = (trends || [])
+    .map((t) => (typeof t === "string" ? { title: t, context: [] } : t))
+    .filter((t) => t && t.title);
+  if (!items.length) return "";
+  const lines = items.slice(0, 6).map((t) => {
+    const h = (t.context || [])[0];
+    return `- ${t.title}${h ? ` (${h})` : ""}`;
+  });
+  return (
+    "\n\nBUGÜN TÜRKİYE'DE X GÜNDEMİ (arka plan — sadece tweet'i daha güncel/insani " +
+    "yapacaksa kullan; zorlama, illa değinme):\n" +
+    lines.join("\n")
+  );
+}
+
 const clean = (s) => (s || "").replace(/^["']|["']$/g, "").trim();
 const clip = (s) => (s.length > 280 ? s.slice(0, 277) + "..." : s);
 
-// Generate one original tweet, rotating styles and avoiding duplicates.
-// `topic` is optional: when given, the tweet is built around that hint
-// (still persona + style rotation + ≤280 + no link).
-async function generateTweet(recent = [], topic = null) {
+// Generate one original tweet. `topic` is an optional hint; `context` is the
+// optional current agenda (enriched trends) for timeliness. Backward compatible.
+async function generateTweet(recent = [], topic = null, context = []) {
   const style = pickStyle();
-  const styleLine = style ? `\n\nBu sefer şu formatta yaz: ${style}` : "";
+  const styleLine = style ? `\n\nBu sefer şu format ruhunda yaz: ${style}` : "";
   const topicLine = topic
     ? `\n\nBu tweet şu konu/ipucu etrafında olsun: ${topic}`
     : "";
 
   const user =
-    "Şu an atılacak tek bir tweet yaz. Sadece tweet metnini ver, " +
-    "tırnak veya açıklama ekleme. Link/URL ekleme." +
+    "Şu an atılacak tek bir tweet yaz. Önce kafanda 2-3 farklı açı düşün, en çok " +
+    "etkileşim alacak ve en doğal olanı seç; sonra SADECE onu yaz. Gerçek bir " +
+    "insanın atacağı gibi doğal, spesifik ve güncel hissettirsin. Tırnak, açıklama " +
+    "veya düşünceni yazma. Link/URL ekleme." +
     topicLine +
     styleLine +
+    agendaBlock(context) +
     avoidBlock(recent);
 
-  return clip(clean(await chat(config.persona, user)));
+  return clip(clean(await chat(tweetSystem(), user)));
 }
 
 // Generate a tweet tied to a *safe, broad* Türkiye trend, grounded in real
@@ -102,25 +179,31 @@ async function generateTrendTweet(trends, recent = []) {
     avoidBlock(recent) +
     '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';
 
-  const out = clean(await chat(config.persona, user));
+  const out = clean(await chat(tweetSystem(), user));
   if (!out || out.toUpperCase() === "SKIP") return null;
   return clip(out);
 }
 
-// Draft a reply to a mention. May return "SKIP" for low-value mentions.
-async function draftReply(mention) {
+// Draft a reply to a mention. `recent` (your last tweets) is used so the reply
+// keeps your voice. May return "SKIP" for low-value mentions.
+async function draftReply(mention, recent = []) {
+  const voice = recent.length
+    ? `\n\nSenin son tweet'lerin (aynı sese/ağıza sadık kal, kopyalama):\n` +
+      recent.slice(0, 5).map((t) => `- ${t}`).join("\n")
+    : "";
   const skipNote = config.skipLowValueMentions
-    ? `\nEğer bu mention cevap vermeye değmez (spam, tek emoji, anlamsız) ise ` +
-      `sadece "SKIP" yaz.`
+    ? `\nBu mention cevaba değmezse (spam, tek emoji, anlamsız) sadece "SKIP" yaz.`
     : "";
 
   const user =
-    `@${mention.author} sana şöyle bir mention attı:\n\n"${mention.text}"\n\n` +
-    `Buna senin ağzından kısa, doğal bir cevap yaz (280 karakteri geçme, ` +
-    `link ekleme). Sadece cevap metnini ver.` +
+    `@${mention.author} sana şöyle yazdı:\n\n"${mention.text}"\n\n` +
+    `Gerçek bir insan gibi, doğal ve kısa bir cevap yaz. Mention'ın tonuna uy ` +
+    `(şakaysa şakayla gir, samimiyse samimi). Robot gibi, fazla kibar ya da ` +
+    `açıklayıcı olma. 280 karakteri geçme, link ekleme. Sadece cevabın metnini ver.` +
+    voice +
     skipNote;
 
-  const reply = clean(await chat(config.persona, user));
+  const reply = clean(await chat(systemPrompt(), user));
   if (reply.toUpperCase() === "SKIP") return "SKIP";
   return clip(reply);
 }

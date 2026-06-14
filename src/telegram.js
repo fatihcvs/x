@@ -84,7 +84,17 @@ async function buildDraft(mode, topic) {
     if (!trends.length) return null;
     return ai.generateTrendTweet(trends, recent); // may be null
   }
-  return ai.generateTweet(recent, topic);
+  // Manual tweet: when no topic is given, pull the current agenda as background
+  // awareness so the tweet feels timely (model uses it only if it helps).
+  let context = [];
+  if (!topic && config.trendsEnabled) {
+    try {
+      context = await getEnrichedTrends();
+    } catch {
+      /* best-effort background */
+    }
+  }
+  return ai.generateTweet(recent, topic, context);
 }
 
 // editMessageText wrapper that swallows Telegram's "not modified" noise.
