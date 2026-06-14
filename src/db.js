@@ -1,21 +1,40 @@
-// Zero-dependency JSON store. Plenty for this bot's scale and deploys
-// anywhere with no native compilation. On Railway/Hetzner, put the project
-// on a persistent disk so data.json survives restarts.
+// Durable store on SQLite via Node's built-in `node:sqlite` (Node 22+, no native
+// build, synchronous API). This is the bot's memory: posts, mentions and meta
+// survive restarts and are queryable. Same function interface as before, so the
+// rest of the app is unchanged. On Railway/Hetzner keep data.db on a persistent
+// disk so history survives redeploys.
 const fs = require("fs");
 const path = require("path");
+const { DatabaseSync } = require("node:sqlite");
 
-const FILE = path.join(__dirname, "..", "data.json");
+const DB_FILE = path.join(__dirname, "..", "data.db");
+const db = new DatabaseSync(DB_FILE);
 
-let data = { meta: {}, posts: [], pending: [], seq: 0 };
-try {
-  data = JSON.parse(fs.readFileSync(FILE, "utf8"));
-} catch {
-  /* first run: start fresh */
-}
-
-function save() {
-  fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
-}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+  );
+  CREATE TABLE IF NOT EXISTS posts (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    date TEXT NOT NULL,
+    at   TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS pending (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    mention_id    TEXT UNIQUE,
+    mention_text  TEXT,
+    author        TEXT,
+    draft         TEXT,
+    tg_message_id INTEGER,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    created_at    TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_posts_kind_date ON posts(kind, date);
+  CREATE INDEX IF NOT EXISTS idx_pending_tg ON pending(tg_message_id);
+`);
 
 const localDate = () => {
   const d = new Date();
@@ -24,67 +43,113 @@ const localDate = () => {
   ).padStart(2, "0")}`;
 };
 
-const getMeta = (key) => (key in data.meta ? data.meta[key] : null);
+// One-time migration from the legacy data.json (if a previous JSON run exists).
+(function migrateFromJson() {
+  try {
+    const JSON_FILE = path.join(__dirname, "..", "data.json");
+    if (!fs.existsSync(JSON_FILE)) return;
+    const have =
+      db.prepare("SELECT COUNT(*) AS n FROM posts").get().n +
+      db.prepare("SELECT COUNT(*) AS n FROM pending").get().n +
+      db.prepare("SELECT COUNT(*) AS n FROM meta").get().n;
+    if (have > 0) return; // DB already populated; don't double-import
+
+    const data = JSON.parse(fs.readFileSync(JSON_FILE, "utf8"));
+    const insMeta = db.prepare(
+      "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)"
+    );
+    for (const [k, v] of Object.entries(data.meta || {})) insMeta.run(k, String(v));
+    const insPost = db.prepare(
+      "INSERT INTO posts(kind, text, date, at) VALUES(?, ?, ?, ?)"
+    );
+    for (const p of data.posts || []) insPost.run(p.kind, p.text, p.date, p.at);
+    const insPend = db.prepare(
+      "INSERT OR IGNORE INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)"
+    );
+    for (const p of data.pending || [])
+      insPend.run(
+        p.mention_id,
+        p.mention_text,
+        p.author,
+        p.draft,
+        p.tg_message_id ?? null,
+        p.status || "pending",
+        p.created_at || new Date().toISOString()
+      );
+    fs.renameSync(JSON_FILE, JSON_FILE + ".migrated"); // keep a backup
+    console.log("[db] data.json -> data.db migrasyonu tamam (yedek: data.json.migrated)");
+  } catch (e) {
+    console.error("[db] migrasyon atlandi:", e.message);
+  }
+})();
+
+// --- API (same signatures as the old JSON store) ------------------------
+const getMeta = (key) => {
+  const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key);
+  return row ? row.value : null;
+};
+
 const setMeta = (key, value) => {
-  data.meta[key] = String(value);
-  save();
+  db.prepare(
+    "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(key, String(value));
 };
 
 const countToday = (kind) =>
-  data.posts.filter((p) => p.kind === kind && p.date === localDate()).length;
+  db
+    .prepare("SELECT COUNT(*) AS n FROM posts WHERE kind = ? AND date = ?")
+    .get(kind, localDate()).n;
 
 const logPost = (kind, text) => {
-  data.posts.push({ kind, text, date: localDate(), at: new Date().toISOString() });
-  save();
+  db.prepare("INSERT INTO posts(kind, text, date, at) VALUES(?, ?, ?, ?)").run(
+    kind,
+    text,
+    localDate(),
+    new Date().toISOString()
+  );
 };
 
 const recentTweets = (limit = 15) =>
-  data.posts
-    .filter((p) => p.kind === "tweet")
-    .slice(-limit)
-    .reverse()
-    .map((p) => p.text);
+  db
+    .prepare("SELECT text FROM posts WHERE kind = 'tweet' ORDER BY id DESC LIMIT ?")
+    .all(limit)
+    .map((r) => r.text);
 
 const mentionSeen = (mentionId) =>
-  data.pending.some((p) => p.mention_id === mentionId);
+  !!db.prepare("SELECT 1 FROM pending WHERE mention_id = ?").get(mentionId);
 
 const addPending = (m) => {
   if (mentionSeen(m.mention_id)) return;
-  data.pending.push({
-    id: ++data.seq,
-    mention_id: m.mention_id,
-    mention_text: m.mention_text,
-    author: m.author,
-    draft: m.draft,
-    tg_message_id: m.tg_message_id ?? null,
-    status: "pending",
-    created_at: new Date().toISOString(),
-  });
-  save();
+  db.prepare(
+    "INSERT INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at) VALUES(?, ?, ?, ?, ?, 'pending', ?)"
+  ).run(
+    m.mention_id,
+    m.mention_text,
+    m.author,
+    m.draft,
+    m.tg_message_id ?? null,
+    new Date().toISOString()
+  );
 };
 
 const setTgMessageId = (mentionId, tgMessageId) => {
-  const p = data.pending.find((x) => x.mention_id === mentionId);
-  if (p) {
-    p.tg_message_id = tgMessageId;
-    save();
-  }
+  db.prepare("UPDATE pending SET tg_message_id = ? WHERE mention_id = ?").run(
+    tgMessageId,
+    mentionId
+  );
 };
 
 const getPendingByTgMessage = (tgMessageId) =>
-  data.pending.find((p) => p.tg_message_id === tgMessageId);
+  db.prepare("SELECT * FROM pending WHERE tg_message_id = ?").get(tgMessageId);
 
-const getPendingById = (id) => data.pending.find((p) => p.id === id);
+const getPendingById = (id) =>
+  db.prepare("SELECT * FROM pending WHERE id = ?").get(id);
 
 const getPendingByMentionId = (mentionId) =>
-  data.pending.find((p) => p.mention_id === mentionId);
+  db.prepare("SELECT * FROM pending WHERE mention_id = ?").get(mentionId);
 
 const setPendingStatus = (id, status) => {
-  const p = getPendingById(id);
-  if (p) {
-    p.status = status;
-    save();
-  }
+  db.prepare("UPDATE pending SET status = ? WHERE id = ?").run(status, id);
 };
 
 module.exports = {

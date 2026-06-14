@@ -23,8 +23,8 @@ X (Twitter) hesabını büyütmek için AI asistanı. İçerik **Anthropic (Clau
 ## Adım adım kurulum
 
 ### 0) Node.js kurulu olsun
-Bilgisayarında/sunucunda **Node.js 18+** olmalı. Kontrol: `node -v`
-Yoksa https://nodejs.org adresinden LTS sürümü kur.
+Bilgisayarında/sunucunda **Node.js 22+** olmalı (yerleşik SQLite veritabanı için).
+Kontrol: `node -v`. Yoksa https://nodejs.org adresinden güncel sürümü kur.
 
 ### 1) Anthropic (Claude) API anahtarı
 1. https://console.anthropic.com → giriş yap.
@@ -77,8 +77,8 @@ değerlerini kendine göre düzenle. Persona ne kadar iyiyse tweet'ler o kadar i
 ### 9) 7/24 çalışsın (deploy)
 Telegram onay akışı sürekli açık bir süreç ister; bilgisayarını kapatınca durur.
 En ucuz iki yol:
-- **Railway** — repo'yu bağla, env değişkenlerini gir, çalıştır. `data.json` için
-  küçük bir Volume ekle (yeniden başlatınca durum kaybolmasın).
+- **Railway** — repo'yu bağla, env değişkenlerini gir, çalıştır. `data.db` için
+  küçük bir Volume ekle (yeniden başlatınca geçmiş/hafıza kaybolmasın).
 - **Hetzner (~€4/ay)** — küçük VPS'te `npm install -g pm2 && pm2 start index.js`
   ile sürekli çalıştır.
 

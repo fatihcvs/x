@@ -42,10 +42,11 @@ GitHub'da (`fatihcvs/x`, `main`):
 | 9 | **Kontrol paneli (Telegram) + günlük özet:** `/pause`, `/resume`, `/stats` ve her akşam özet. | ✅ |
 | 10 | **Performans öğrenme döngüsü:** kendi en çok tutan tweet'lerini okuyup üretime besler (`learnFromMetrics`). | ✅ |
 | 11 | **Akıllı oto-cevap:** mention'ları auto/review/skip diye sınıflar; sadece açıkça güvenli olanlara otomatik cevap verir, gerisi onaya düşer. | ✅ |
+| 12 | **Kalıcı hafıza (veritabanı):** `data.json` → yerleşik **SQLite** (`node:sqlite`, `data.db`); aynı arayüz, otomatik göç. Geçmiş artık sorgulanabilir bir DB'de. | ✅ |
 
 **Bugünkü teknoloji:** Node.js (CommonJS) tek süreç · `@anthropic-ai/sdk` ·
-`twitter-api-v2` · `node-telegram-bot-api` · `node-cron` · `dotenv`. Durum tek bir
-`data.json` dosyasında. Kontrol arayüzü = Telegram.
+`twitter-api-v2` · `node-telegram-bot-api` · `node-cron` · `dotenv`. Durum yerleşik
+**SQLite** (`data.db`, `node:sqlite`) veritabanında. Kontrol arayüzü = Telegram.
 
 ---
 
@@ -56,7 +57,7 @@ GitHub'da (`fatihcvs/x`, `main`):
 | Kullanıcı | 1 (sahip) | Çok kullanıcı, kayıt/giriş |
 | Platform | Sadece X | X + Instagram + TikTok + … (adaptörler) |
 | Arayüz | Telegram | Web kontrol paneli (+ Telegram opsiyonel) |
-| Veri | `data.json` (tek dosya) | Gerçek veritabanı (SQLite→Postgres) |
+| Veri | **SQLite** (`data.db`, tek dosya) | Postgres + kullanıcı başına izolasyon |
 | Anahtarlar | Tek `.env` | Kullanıcı başına **şifreli** saklanan anahtarlar |
 | Süreç | Tek Node süreci | Web app + worker(lar) + DB (+ kuyruk) |
 | Faturalandırma | Yok | Planlar/abonelik (Stripe) |
@@ -120,9 +121,10 @@ Amaç: X'e kilitli olmaktan çıkmak.
 
 ### Faz 3 — Çok kullanıcı (SaaS) ▢
 Amaç: başka kullanıcıların da kayıt olup kendi hesaplarını yönetmesi.
-1. **Veritabanı:** SQLite ile başla (göç kolay), ölçeklenince Postgres.
-   `data.json` → DB göçü. Tablolar: `users`, `accounts` (platform + **şifreli**
-   creds), `posts`, `pending`, `settings`, `metrics/jobs`.
+1. **Veritabanı:** SQLite temeli **kuruldu** (`data.db`, `node:sqlite`; eski
+   `data.json` otomatik göç ediyor). Burada yapılacak: çok-kullanıcı şeması
+   (`users`, `accounts` = platform + **şifreli** creds; her sorgu `user_id` ile
+   izole), ölçek için Postgres'e geçiş.
 2. **Kimlik:** kullanıcı kayıt/giriş (email+şifre veya OAuth), oturum/JWT.
 3. **Creds güvenliği:** kullanıcı API anahtarları **at-rest şifreli** saklanır
    (uygulama anahtarı/secret manager). Sandbox/loglara asla sızmaz.
@@ -142,6 +144,9 @@ Amaç: başka kullanıcıların da kayıt olup kendi hesaplarını yönetmesi.
 Her adımda aynı ritim: **uygula → doğrula (syntax + test) → "evet" → commit & push.**
 Büyük fazlar küçük, gözden geçirilebilir parçalara bölünür. Her parça kendi
 başına çalışır halde bırakılır (yarım bırakmayız).
+
+**Bu yol haritası her değişiklikte güncellenir** — ne yaptığımız, nerede olduğumuz
+ve nereye gittiğimiz dökümana bakınca daima güncel görünür.
 
 ---
 
