@@ -3,6 +3,7 @@ const config = require("../config");
 const x = require("./x");
 const ai = require("./ai");
 const db = require("./db");
+const { getTrends } = require("./trends");
 const { notify, sendSuggestion } = require("./telegram");
 
 // --- Post one original tweet (respecting the daily cap) ----------------
@@ -11,10 +12,30 @@ async function runTweetJob() {
     if (db.countToday("tweet") >= config.maxTweetsPerDay) {
       return notify("⏸️ Günlük tweet limiti dolu, atlandı.");
     }
-    const tweet = await ai.generateTweet(db.recentTweets());
+    const recent = db.recentTweets();
+
+    // Ride a safe, broad trend when one is available; otherwise post normally.
+    let tweet = null;
+    let viaTrend = false;
+    if (config.trendsEnabled) {
+      try {
+        const trends = await getTrends();
+        if (trends.length) {
+          const t = await ai.generateTrendTweet(trends, recent);
+          if (t) {
+            tweet = t;
+            viaTrend = true;
+          }
+        }
+      } catch {
+        /* trend path is best-effort; fall back to a normal tweet */
+      }
+    }
+    if (!tweet) tweet = await ai.generateTweet(recent);
+
     await x.postTweet(tweet);
     db.logPost("tweet", tweet);
-    notify(`📤 Tweet atıldı:\n"${tweet}"`);
+    notify(`${viaTrend ? "🔥 Trend tweet" : "📤 Tweet"} atıldı:\n"${tweet}"`);
   } catch (e) {
     notify("⚠️ Tweet atılamadı: " + e.message);
   }

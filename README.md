@@ -8,6 +8,10 @@ X (Twitter) hesabını büyütmek için AI asistanı. İçerik **OpenAI (ChatGPT
 - **Mention'lar:** otomatik DEĞİL. Biri yazınca AI cevap taslağı hazırlar, Telegram'a
   düşer. **✅ Gönder** / **❌ Geç**. Mesajı yanıtlayıp kendi metnini de yollayabilirsin.
 - **Beğeni / takip yok:** hesap ban'ını tetikleyen kısım bu, bilerek eklenmedi.
+- **Manuel tweet:** Telegram'dan `/tweet`, `/tweet <konu>` veya `/trend` ile
+  istediğin an taslak üret → **✅ Gönder / 🔄 Yeniden üret / ❌ İptal**.
+- **Trend farkındalığı:** otomatik tweet'ler uygun (hafif/güvenli) Türkiye
+  trendlerine bağlanır; hassas konular atlanır, uygun trend yoksa normal atar.
 
 ---
 
@@ -80,6 +84,15 @@ En ucuz iki yol:
 - Mention gelince Telegram'a taslak + **✅ Gönder / ❌ Geç** düşer.
 - Taslağı beğenmezsen o mesajı **yanıtla**, yazdığın metin cevap olarak gider.
 
+### Manuel tweet & trend (Telegram komutları)
+- **`/tweet`** — persona + rastgele formatla bir tweet taslağı üretir.
+- **`/tweet <konu>`** — verdiğin konu/ipucu etrafında taslak üretir.
+- **`/trend`** — o an uygun (hafif/güvenli) bir Türkiye trendine göre taslak üretir.
+
+Her taslakta **✅ Gönder / 🔄 Yeniden üret / ❌ İptal** butonları gelir. Gönderilen
+manuel tweet'ler de günlük limite (`maxTweetsPerDay`) dahildir. Komutlar yalnızca
+senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
+
 ## Ayarlar — sadece `config.js`
 - `model` — `gpt-4o-mini` (ucuz, varsayılan) / `gpt-5.4-mini` (daha kaliteli, pahalı).
   Not: GPT-5.x modeline geçersen `src/ai.js` içinde `max_tokens` yerine
@@ -88,6 +101,9 @@ En ucuz iki yol:
 - `tweetStyles` — rastgele dönen tweet formatları.
 - `tweetSchedule` — kaç tweet, hangi saatlerde (cron).
 - `maxTweetsPerDay` / `maxRepliesPerDay` — güvenli sınırlar.
+- `trendsEnabled` — `true` ise zamanlanmış tweet'ler uygun bir **Türkiye trendine**
+  bağlanır (hassas konular atlanır); uygun trend yoksa normal tweet atılır. `/trend`
+  komutu da bu mantığı kullanır. Kapatmak için `false` yap.
 
 **Tahmini maliyet:** OpenAI tarafı tweet başına neredeyse yok denecek kadar az
 (gpt-4o-mini ile aylık birkaç dolar); X tarafı günde 3 tweet ≈ ayda ~$1-3.

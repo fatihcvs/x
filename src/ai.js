@@ -17,28 +17,73 @@ async function chat(system, user) {
   return (res.choices?.[0]?.message?.content || "").trim();
 }
 
-// Generate one original tweet, rotating styles and avoiding duplicates.
-async function generateTweet(recent = []) {
-  const avoid = recent.length
-    ? `\n\nSon attığın tweet'ler (bunları TEKRARLAMA, format ve konu olarak farklı yaz):\n` +
-      recent.map((t) => `- ${t}`).join("\n")
-    : "";
-
+// --- Shared helpers ---------------------------------------------------
+function pickStyle() {
   const styles = config.tweetStyles || [];
-  const style = styles.length
+  return styles.length
     ? styles[Math.floor(Math.random() * styles.length)]
     : null;
+}
+
+function avoidBlock(recent = []) {
+  return recent.length
+    ? `\n\nSon attığın tweet'ler (bunları TEKRARLAMA, format ve konu olarak farklı yaz):\n` +
+        recent.map((t) => `- ${t}`).join("\n")
+    : "";
+}
+
+const clean = (s) => (s || "").replace(/^["']|["']$/g, "").trim();
+const clip = (s) => (s.length > 280 ? s.slice(0, 277) + "..." : s);
+
+// Generate one original tweet, rotating styles and avoiding duplicates.
+// `topic` is optional: when given, the tweet is built around that hint
+// (still persona + style rotation + ≤280 + no link).
+async function generateTweet(recent = [], topic = null) {
+  const style = pickStyle();
   const styleLine = style ? `\n\nBu sefer şu formatta yaz: ${style}` : "";
+  const topicLine = topic
+    ? `\n\nBu tweet şu konu/ipucu etrafında olsun: ${topic}`
+    : "";
 
   const user =
     "Şu an atılacak tek bir tweet yaz. Sadece tweet metnini ver, " +
-    "tırnak veya açıklama ekleme." +
+    "tırnak veya açıklama ekleme. Link/URL ekleme." +
+    topicLine +
     styleLine +
-    avoid;
+    avoidBlock(recent);
 
-  let tweet = (await chat(config.persona, user)).replace(/^["']|["']$/g, "").trim();
-  if (tweet.length > 280) tweet = tweet.slice(0, 277) + "...";
-  return tweet;
+  return clip(clean(await chat(config.persona, user)));
+}
+
+// Generate a tweet tied to a *safe, broad* Türkiye trend.
+// Returns null when there are no trends or none are suitable (so callers
+// can fall back to a normal tweet).
+async function generateTrendTweet(trends, recent = []) {
+  const list = (trends || []).filter(Boolean);
+  if (!list.length) return null;
+
+  const style = pickStyle();
+  const styleLine = style
+    ? `\n\nUygun trendi seçtikten sonra şu formatta yaz: ${style}`
+    : "";
+
+  const user =
+    "Şu an Türkiye'de X (Twitter) gündemindeki başlıklar:\n" +
+    list.map((t) => `- ${t}`).join("\n") +
+    "\n\nGÖREV: Bu başlıklardan SADECE hafif, geniş kitleye hitap eden ve " +
+    "GÜVENLİ olan bir tanesini seç, ona doğal şekilde bağlanan tek bir tweet yaz.\n" +
+    "ŞUNLARI KESİNLİKLE ATLA: ölüm/vefat/taziye, felaket/kaza, siyaset/seçim/" +
+    "politik figürler, tartışmalı/ajite/provokatif konular, dini ya da etnik " +
+    "hassasiyetler, markalı reklam/kampanya, bir kişiyi hedef alan içerik.\n" +
+    'Uygun (hafif ve güvenli) bir başlık YOKSA sadece "SKIP" yaz.\n' +
+    "Kurallar: link/URL yok, 280 karakteri geçme, doğal ol ve persona'na sadık kal." +
+    styleLine +
+    avoidBlock(recent) +
+    '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';
+
+  const out = clean(await chat(config.persona, user));
+  if (!out || out.toUpperCase() === "SKIP") return null;
+  return clip(out);
 }
 
 // Draft a reply to a mention. May return "SKIP" for low-value mentions.
@@ -54,10 +99,9 @@ async function draftReply(mention) {
     `link ekleme). Sadece cevap metnini ver.` +
     skipNote;
 
-  let reply = (await chat(config.persona, user)).replace(/^["']|["']$/g, "").trim();
+  const reply = clean(await chat(config.persona, user));
   if (reply.toUpperCase() === "SKIP") return "SKIP";
-  if (reply.length > 280) reply = reply.slice(0, 277) + "...";
-  return reply;
+  return clip(reply);
 }
 
-module.exports = { generateTweet, draftReply };
+module.exports = { chat, generateTweet, generateTrendTweet, draftReply };

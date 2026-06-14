@@ -54,6 +54,12 @@ BÜYÜME İÇİN İYİ TWEET PRENSİPLERİ:
 
 
 
+  // --- Trend awareness ------------------------------------------------
+  // When true, scheduled tweets (and the /trend command) try to ride a
+  // *safe, broad* Türkiye trend; sensitive topics are skipped and, if
+  // nothing suitable is found, a normal tweet is posted instead.
+  trendsEnabled: true,
+
   // --- Normal tweets (no link) ----------------------------------------
   tweetSchedule: [
     "0 12 * * *", // 12:00

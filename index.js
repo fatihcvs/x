@@ -26,7 +26,12 @@ const { notify } = require("./src/telegram");
     const userId = await x.getUserId(); // verifies X credentials early
     console.log("[startup] X auth OK, user id:", userId);
     scheduler.start();
-    notify("🤖 Co-pilot çalışıyor. Tweet'ler otomatik, mention'lar onayına gelecek.");
+    notify(
+      "🤖 Co-pilot çalışıyor.\n" +
+        "• Tweet'ler otomatik (uygun trend varsa ona göre)\n" +
+        "• Mention'lar onayına gelir\n" +
+        "• Komutlar: /tweet, /tweet <konu>, /trend"
+    );
     console.log("[startup] running.");
   } catch (e) {
     console.error("[startup] failed:", e.message);
