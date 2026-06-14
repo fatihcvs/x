@@ -1,0 +1,17 @@
+{
+  "name": "ai-twitter-copilot",
+  "version": "1.0.0",
+  "description": "AI co-pilot for X/Twitter: autonomous posting + human-approved reply suggestions via Telegram",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.77.0",
+    "dotenv": "^16.4.0",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0",
+    "twitter-api-v2": "^1.18.0"
+  }
+}

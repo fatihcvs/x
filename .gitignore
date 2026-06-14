@@ -1,0 +1,8 @@
+node_modules/
+.env
+data.json
+*.log
+
+# local packaging artifacts
+ai-twitter-copilot.zip
+_tmp_extract/
