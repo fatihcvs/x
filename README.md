@@ -10,8 +10,9 @@ X (Twitter) hesabını büyütmek için AI asistanı. İçerik **OpenAI (ChatGPT
 - **Beğeni / takip yok:** hesap ban'ını tetikleyen kısım bu, bilerek eklenmedi.
 - **Manuel tweet:** Telegram'dan `/tweet`, `/tweet <konu>` veya `/trend` ile
   istediğin an taslak üret → **✅ Gönder / 🔄 Yeniden üret / ❌ İptal**.
-- **Trend farkındalığı:** otomatik tweet'ler uygun (hafif/güvenli) Türkiye
-  trendlerine bağlanır; hassas konular atlanır, uygun trend yoksa normal atar.
+- **Trend farkındalığı:** otomatik tweet'ler, güncel **Türkiye haberleriyle bağlam
+  kurarak** uygun (hafif/güvenli) bir trende bağlanır — trendin neden gündemde
+  olduğunu analiz eder, hassas/çözülemeyen trendleri atlar, uygun yoksa normal atar.
 
 ---
 
@@ -105,6 +106,9 @@ senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
 - `trendsEnabled` — `true` ise zamanlanmış tweet'ler uygun bir **Türkiye trendine**
   bağlanır (hassas konular atlanır); uygun trend yoksa normal tweet atılır. `/trend`
   komutu da bu mantığı kullanır. Kapatmak için `false` yap.
+  Trend listesi getdaytrends.com'dan, "neden trend?" bağlamı ise Google News (TR)
+  başlıklarından gelir (ücretsiz, API key yok). Her iki kaynak da `src/trends.js`
+  içinde tek yerde toplanmıştır; değiştirmek istersen orayı düzenle.
 
 **Tahmini maliyet:** OpenAI tarafı tweet başına neredeyse yok denecek kadar az
 (gpt-4o-mini ile aylık birkaç dolar); X tarafı günde 3 tweet ≈ ayda ~$1-3.

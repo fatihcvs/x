@@ -55,28 +55,49 @@ async function generateTweet(recent = [], topic = null) {
   return clip(clean(await chat(config.persona, user)));
 }
 
-// Generate a tweet tied to a *safe, broad* Türkiye trend.
-// Returns null when there are no trends or none are suitable (so callers
-// can fall back to a normal tweet).
+// Generate a tweet tied to a *safe, broad* Türkiye trend, grounded in real
+// news context so the model understands *why* something is trending.
+// `trends` is [{ title, context: string[] }] (plain strings also accepted).
+// Returns null when nothing is suitable (so callers fall back to a normal tweet).
 async function generateTrendTweet(trends, recent = []) {
-  const list = (trends || []).filter(Boolean);
-  if (!list.length) return null;
+  const items = (trends || [])
+    .map((t) => (typeof t === "string" ? { title: t, context: [] } : t))
+    .filter((t) => t && t.title);
+  if (!items.length) return null;
 
   const style = pickStyle();
   const styleLine = style
-    ? `\n\nUygun trendi seçtikten sonra şu formatta yaz: ${style}`
+    ? `\n\nSeçtiğin trende uygunsa şu format ruhunda yaz: ${style}`
     : "";
 
+  const trendBlock = items
+    .map((t, i) => {
+      const ctx =
+        t.context && t.context.length
+          ? "\n   İlgili haberler: " +
+            t.context.map((h) => `"${h}"`).join(" | ")
+          : "\n   (güncel haber bulunamadı)";
+      return `${i + 1}. ${t.title}${ctx}`;
+    })
+    .join("\n");
+
   const user =
-    "Şu an Türkiye'de X (Twitter) gündemindeki başlıklar:\n" +
-    list.map((t) => `- ${t}`).join("\n") +
-    "\n\nGÖREV: Bu başlıklardan SADECE hafif, geniş kitleye hitap eden ve " +
-    "GÜVENLİ olan bir tanesini seç, ona doğal şekilde bağlanan tek bir tweet yaz.\n" +
-    "ŞUNLARI KESİNLİKLE ATLA: ölüm/vefat/taziye, felaket/kaza, siyaset/seçim/" +
-    "politik figürler, tartışmalı/ajite/provokatif konular, dini ya da etnik " +
-    "hassasiyetler, markalı reklam/kampanya, bir kişiyi hedef alan içerik.\n" +
-    'Uygun (hafif ve güvenli) bir başlık YOKSA sadece "SKIP" yaz.\n' +
-    "Kurallar: link/URL yok, 280 karakteri geçme, doğal ol ve persona'na sadık kal." +
+    "Şu an Türkiye'de X (Twitter) gündemindeki trendler ve (varsa) ilgili güncel " +
+    "haber başlıkları aşağıda. Haberler, trendin NEDEN gündemde olduğunu anlaman için.\n\n" +
+    trendBlock +
+    "\n\nADIM ADIM DÜŞÜN:\n" +
+    "1) Hangi trendi gerçekten ANLADIĞINI ve hakkında iyi, güvenli, geniş kitleye " +
+    "hitap eden bir tweet yazabileceğini seç.\n" +
+    "2) ŞUNLARI ATLA: ölüm/vefat/taziye, felaket/kaza, siyaset/seçim/politik figürler, " +
+    "tartışmalı/ajite/provokatif konular, dini ya da etnik hassasiyetler, markalı " +
+    "reklam/kampanya, bir kişiyi hedef alan içerik VE ne olduğunu çözemediğin belirsiz " +
+    "trendler.\n" +
+    '3) Uygun hiçbir trend yoksa SADECE "SKIP" yaz.\n' +
+    "4) Uygun trend varsa, o konuya GERÇEKTEN değinen tek bir tweet yaz. Trendi doğal " +
+    "işle; kelimeyi/etiketi cümleye zorla sıkıştırma. Hook ile başla, vurucu ve " +
+    "paylaşılası olsun.\n\n" +
+    "KURALLAR: link/URL yok; 280 karakteri geçme; en fazla 1 hashtag, o da ancak doğal " +
+    "duruyorsa; persona'na sadık kal." +
     styleLine +
     avoidBlock(recent) +
     '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';

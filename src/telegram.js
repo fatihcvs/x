@@ -3,7 +3,7 @@ const config = require("../config");
 const x = require("./x");
 const ai = require("./ai");
 const db = require("./db");
-const { getTrends } = require("./trends");
+const { getEnrichedTrends } = require("./trends");
 
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -80,7 +80,7 @@ const draftBody = (mode, text) =>
 async function buildDraft(mode, topic) {
   const recent = db.recentTweets();
   if (mode === "trend") {
-    const trends = await getTrends();
+    const trends = await getEnrichedTrends();
     if (!trends.length) return null;
     return ai.generateTrendTweet(trends, recent); // may be null
   }

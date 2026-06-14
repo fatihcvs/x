@@ -3,7 +3,7 @@ const config = require("../config");
 const x = require("./x");
 const ai = require("./ai");
 const db = require("./db");
-const { getTrends } = require("./trends");
+const { getEnrichedTrends } = require("./trends");
 const { notify, sendSuggestion } = require("./telegram");
 
 // --- Post one original tweet (respecting the daily cap) ----------------
@@ -19,7 +19,7 @@ async function runTweetJob() {
     let viaTrend = false;
     if (config.trendsEnabled) {
       try {
-        const trends = await getTrends();
+        const trends = await getEnrichedTrends();
         if (trends.length) {
           const t = await ai.generateTrendTweet(trends, recent);
           if (t) {

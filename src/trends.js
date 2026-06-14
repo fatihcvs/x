@@ -83,4 +83,49 @@ async function getTrends() {
   }
 }
 
-module.exports = { getTrends };
+// --- News context (why is something trending?) -----------------------
+// We enrich the top trends with recent Türkiye news headlines from Google
+// News RSS (free, no key) so the model can actually understand a trend
+// instead of guessing from the bare title.
+const CONTEXT_COUNT = 8; // how many top trends to enrich
+const HEADLINES_PER_TREND = 4;
+
+const newsRssUrl = (term) =>
+  "https://news.google.com/rss/search?q=" +
+  encodeURIComponent(term.replace(/^#/, "")) +
+  "&hl=tr&gl=TR&ceid=TR:tr";
+
+// Recent headline strings for a query, or [] on any failure.
+function parseHeadlines(xml) {
+  const out = [];
+  const items = xml.split(/<item>/i).slice(1); // drop the channel header
+  for (const it of items) {
+    const m = it.match(/<title>([\s\S]*?)<\/title>/i);
+    if (!m) continue;
+    let t = decode(m[1].replace(/<!\[CDATA\[|\]\]>/g, "")).trim();
+    t = t.replace(/\s+-\s+[^-]+$/, "").trim(); // strip trailing " - Source"
+    if (t && !out.includes(t)) out.push(t);
+    if (out.length >= HEADLINES_PER_TREND) break;
+  }
+  return out;
+}
+
+async function getTrendContext(term) {
+  try {
+    return parseHeadlines(await fetchText(newsRssUrl(term)));
+  } catch {
+    return [];
+  }
+}
+
+// Top trends paired with their news context: [{ title, context: string[] }].
+// Always resolves (empty array if the trend source is down).
+async function getEnrichedTrends() {
+  const titles = await getTrends();
+  if (!titles.length) return [];
+  const top = titles.slice(0, CONTEXT_COUNT);
+  const contexts = await Promise.all(top.map(getTrendContext));
+  return top.map((title, i) => ({ title, context: contexts[i] }));
+}
+
+module.exports = { getTrends, getTrendContext, getEnrichedTrends };
