@@ -109,6 +109,9 @@ senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
   Değiştirmek için sadece adını yaz (kod düzenlemene gerek yok).
 - `refineTweets` — `true` ise her tweet ikinci bir "editör" turuyla cilalanır
   (kalite ↑, tweet başına model maliyeti ~2x). Kapatmak için `false`.
+- `learnFromMetrics` — `true` ise bot kendi en çok tutan tweet'lerini (beğeni/RT/
+  yorum) okuyup üretime "şu işe yaradı" sinyali olarak besler. X API'de okuma
+  erişimi yoksa sessizce devre dışı kalır.
 - `accountGoal` / `referenceInfluencers` — büyüme hedefi ve taklit edilecek
   (kopyalanmayacak) tarz referansları. Bot, başarılı influencer mantığıyla ve
   güncel gündeme göre büyüme/etkileşim odaklı tweet üretir.

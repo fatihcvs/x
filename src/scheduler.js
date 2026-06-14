@@ -4,6 +4,7 @@ const x = require("./x");
 const ai = require("./ai");
 const db = require("./db");
 const { getEnrichedTrends } = require("./trends");
+const { getLearnings } = require("./insights");
 const { notify, sendSuggestion } = require("./telegram");
 
 // --- Post one original tweet (respecting the daily cap) ----------------
@@ -27,11 +28,21 @@ async function runTweetJob() {
       }
     }
 
+    // Learn from what performed well (best-effort; needs API read access).
+    let learnings = "";
+    if (config.learnFromMetrics) {
+      try {
+        learnings = await getLearnings();
+      } catch {
+        /* best-effort */
+      }
+    }
+
     let tweet = null;
     let viaTrend = false;
     if (trends.length) {
       try {
-        const t = await ai.generateTrendTweet(trends, recent);
+        const t = await ai.generateTrendTweet(trends, recent, learnings);
         if (t) {
           tweet = t;
           viaTrend = true;
@@ -40,7 +51,7 @@ async function runTweetJob() {
         /* trend writing failed; fall back to a normal tweet below */
       }
     }
-    if (!tweet) tweet = await ai.generateTweet(recent, null, trends);
+    if (!tweet) tweet = await ai.generateTweet(recent, null, trends, learnings);
 
     await x.postTweet(tweet);
     db.logPost("tweet", tweet);

@@ -4,6 +4,7 @@ const x = require("./x");
 const ai = require("./ai");
 const db = require("./db");
 const { getEnrichedTrends } = require("./trends");
+const { getLearnings } = require("./insights");
 
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -89,10 +90,19 @@ function draftBody(mode, content) {
 async function buildDraft(mode, topic) {
   const recent = db.recentTweets();
 
+  let learnings = "";
+  if (config.learnFromMetrics) {
+    try {
+      learnings = await getLearnings();
+    } catch {
+      /* best-effort */
+    }
+  }
+
   if (mode === "trend") {
     const trends = await getEnrichedTrends();
     if (!trends.length) return null;
-    const t = await ai.generateTrendTweet(trends, recent);
+    const t = await ai.generateTrendTweet(trends, recent, learnings);
     return t ? { text: t } : null;
   }
 
@@ -107,11 +117,11 @@ async function buildDraft(mode, topic) {
   }
 
   if (mode === "thread") {
-    const parts = await ai.generateThread(topic, recent, context);
+    const parts = await ai.generateThread(topic, recent, context, learnings);
     return parts && parts.length ? { parts } : null;
   }
 
-  const text = await ai.generateTweet(recent, topic, context);
+  const text = await ai.generateTweet(recent, topic, context, learnings);
   return text ? { text } : null;
 }
 

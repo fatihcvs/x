@@ -15,6 +15,10 @@ module.exports = {
   // model maliyetini ~2x yapar; kapatmak için false.
   refineTweets: true,
 
+  // Kendi tweet metriklerinden (beğeni/RT/yorum) "neyin tuttuğunu" öğrenip
+  // üretime besler. X API'de okuma erişimi yoksa sessizce devre dışı kalır.
+  learnFromMetrics: true,
+
   // --- Your Kick channel ----------------------------------------------
   kickUsername: "thepublisher",
   kickUrl: "https://kick.com/thepublisher",

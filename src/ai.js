@@ -115,7 +115,7 @@ async function refine(draft, recent = []) {
 
 // Generate one original tweet. `topic` is an optional hint; `context` is the
 // optional current agenda (enriched trends) for timeliness. Backward compatible.
-async function generateTweet(recent = [], topic = null, context = []) {
+async function generateTweet(recent = [], topic = null, context = [], learnings = "") {
   const style = pickStyle();
   const styleLine = style ? `\n\nBu sefer şu format ruhunda yaz: ${style}` : "";
   const topicLine = topic
@@ -130,6 +130,7 @@ async function generateTweet(recent = [], topic = null, context = []) {
     topicLine +
     styleLine +
     agendaBlock(context) +
+    (learnings || "") +
     avoidBlock(recent);
 
   let out = clip(clean(await chat(tweetSystem(), user)));
@@ -141,7 +142,7 @@ async function generateTweet(recent = [], topic = null, context = []) {
 // news context so the model understands *why* something is trending.
 // `trends` is [{ title, context: string[] }] (plain strings also accepted).
 // Returns null when nothing is suitable (so callers fall back to a normal tweet).
-async function generateTrendTweet(trends, recent = []) {
+async function generateTrendTweet(trends, recent = [], learnings = "") {
   const items = (trends || [])
     .map((t) => (typeof t === "string" ? { title: t, context: [] } : t))
     .filter((t) => t && t.title);
@@ -181,6 +182,7 @@ async function generateTrendTweet(trends, recent = []) {
     "KURALLAR: link/URL yok; 280 karakteri geçme; en fazla 1 hashtag, o da ancak doğal " +
     "duruyorsa; persona'na sadık kal." +
     styleLine +
+    (learnings || "") +
     avoidBlock(recent) +
     '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';
 
@@ -193,7 +195,7 @@ async function generateTrendTweet(trends, recent = []) {
 
 // Generate a 3-5 tweet thread (array of strings) on a topic. Growth-oriented,
 // human, no links, each part <=280. Returns [] when nothing usable.
-async function generateThread(topic = null, recent = [], context = []) {
+async function generateThread(topic = null, recent = [], context = [], learnings = "") {
   const topicLine = topic
     ? `\n\nKonu/ipucu: ${topic}`
     : "\n\nKonuyu sen seç: gündeme ve persona'na uygun, geniş kitleye hitap eden bir şey.";
@@ -206,6 +208,7 @@ async function generateThread(topic = null, recent = [], context = []) {
     "- Her tweet en fazla 280 karakter, link/URL yok, en fazla 1 doğal hashtag." +
     topicLine +
     agendaBlock(context) +
+    (learnings || "") +
     avoidBlock(recent) +
     "\n\nÇIKTI BİÇİMİ: yalnızca tweet metinleri; her tweet'in arasına AYRI bir satırda `---` koy. Numara, etiket veya açıklama ekleme.";
 

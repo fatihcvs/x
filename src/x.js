@@ -72,4 +72,28 @@ async function getNewMentions(sinceId) {
     .reverse(); // process oldest first
 }
 
-module.exports = { getUserId, postTweet, replyTo, postThread, getNewMentions };
+// Your own recent original tweets with engagement metrics (best-effort: needs
+// API read access). Newest first.
+async function getMyRecentTweets(max = 20) {
+  const userId = await getUserId();
+  const timeline = await rw.v2.userTimeline(userId, {
+    max_results: Math.min(Math.max(max, 5), 100),
+    "tweet.fields": ["public_metrics", "created_at"],
+    exclude: ["retweets", "replies"],
+  });
+  const tweets = timeline.data?.data ?? [];
+  return tweets.map((t) => ({
+    id: t.id,
+    text: t.text,
+    metrics: t.public_metrics || {},
+  }));
+}
+
+module.exports = {
+  getUserId,
+  postTweet,
+  replyTo,
+  postThread,
+  getNewMentions,
+  getMyRecentTweets,
+};
