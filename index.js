@@ -20,12 +20,14 @@ if (missing.length) {
 const x = require("./src/x");
 const scheduler = require("./src/scheduler");
 const { notify } = require("./src/telegram");
+const web = require("./src/web");
 
 (async () => {
   try {
     const userId = await x.getUserId(); // verifies X credentials early
     console.log("[startup] X auth OK, user id:", userId);
     scheduler.start();
+    web.start();
     notify(
       "🤖 Co-pilot çalışıyor.\n" +
         "• Tweet'ler otomatik (uygun trend varsa ona göre)\n" +

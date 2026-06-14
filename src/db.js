@@ -115,6 +115,18 @@ const recentTweets = (limit = 15) =>
     .all(limit)
     .map((r) => r.text);
 
+const recentPosts = (limit = 20) =>
+  db
+    .prepare("SELECT kind, text, at FROM posts ORDER BY id DESC LIMIT ?")
+    .all(limit);
+
+const listPending = (status = "pending") =>
+  db
+    .prepare(
+      "SELECT id, mention_id, mention_text, author, draft, status, created_at FROM pending WHERE status = ? ORDER BY id DESC"
+    )
+    .all(status);
+
 const mentionSeen = (mentionId) =>
   !!db.prepare("SELECT 1 FROM pending WHERE mention_id = ?").get(mentionId);
 
@@ -158,6 +170,8 @@ module.exports = {
   countToday,
   logPost,
   recentTweets,
+  recentPosts,
+  listPending,
   mentionSeen,
   addPending,
   setTgMessageId,

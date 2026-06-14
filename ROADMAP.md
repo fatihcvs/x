@@ -43,6 +43,7 @@ GitHub'da (`fatihcvs/x`, `main`):
 | 10 | **Performans öğrenme döngüsü:** kendi en çok tutan tweet'lerini okuyup üretime besler (`learnFromMetrics`). | ✅ |
 | 11 | **Akıllı oto-cevap:** mention'ları auto/review/skip diye sınıflar; sadece açıkça güvenli olanlara otomatik cevap verir, gerisi onaya düşer. | ✅ |
 | 12 | **Kalıcı hafıza (veritabanı):** `data.json` → yerleşik **SQLite** (`node:sqlite`, `data.db`); aynı arayüz, otomatik göç. Geçmiş artık sorgulanabilir bir DB'de. | ✅ |
+| 13 | **Web kontrol paneli (ilk dilim):** Express + şifreli giriş + dashboard (istatistik, son aktivite, bekleyen mention'lar, ⏸️/▶️). | ✅ |
 
 **Bugünkü teknoloji:** Node.js (CommonJS) tek süreç · `@anthropic-ai/sdk` ·
 `twitter-api-v2` · `node-telegram-bot-api` · `node-cron` · `dotenv`. Durum yerleşik
@@ -56,7 +57,7 @@ GitHub'da (`fatihcvs/x`, `main`):
 |------|------------------------|--------------|
 | Kullanıcı | 1 (sahip) | Çok kullanıcı, kayıt/giriş |
 | Platform | Sadece X | X + Instagram + TikTok + … (adaptörler) |
-| Arayüz | Telegram | Web kontrol paneli (+ Telegram opsiyonel) |
+| Arayüz | Telegram + **web paneli** (ilk dilim) | Tam web paneli (+ Telegram opsiyonel) |
 | Veri | **SQLite** (`data.db`, tek dosya) | Postgres + kullanıcı başına izolasyon |
 | Anahtarlar | Tek `.env` | Kullanıcı başına **şifreli** saklanan anahtarlar |
 | Süreç | Tek Node süreci | Web app + worker(lar) + DB (+ kuyruk) |
@@ -78,8 +79,11 @@ Her şey bunun üstüne kurulacak; önce gerçekten çalıştığını görelim.
 4. Persona/model/`refineTweets`/saatleri gerçek çıktıya göre ince ayarla.
 - **Kabul:** Bot 7/24 sorunsuz çalışıyor, tweet/cevap kalitesi tatmin edici.
 
-### Faz 1 — Kişisel tam kontrol paneli (web) ▢  ← *bir sonraki büyük adım*
+### Faz 1 — Kişisel tam kontrol paneli (web) 🔧 *devam ediyor*
 Amaç: botu tarayıcıdan, görsel bir panelden yönetmek (Telegram'ı tamamlar).
+**İlk dilim ✅:** Express sunucu + şifreli giriş (`DASHBOARD_PASSWORD`) + dashboard
+(bugünkü istatistik, son aktivite, bekleyen mention'lar, ⏸️/▶️ duraklat/devam).
+**Kalan:** composer (üret→önizle→onayla→gönder), mention onay aksiyonları, ayar düzenleme.
 1. **Web sunucusu:** Express ekle, bota entegre başlat (`PORT` env). Tek
    sayfalık arayüz + JSON API.
 2. **Güvenlik:** tek şifreli giriş (`DASHBOARD_PASSWORD`), imzalı oturum çerezi;

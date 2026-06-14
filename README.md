@@ -104,6 +104,17 @@ Her taslakta **✅ Gönder / 🔄 Yeniden üret / ❌ İptal** butonları gelir.
 manuel tweet'ler de günlük limite (`maxTweetsPerDay`) dahildir. Komutlar yalnızca
 senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
 
+## Web kontrol paneli (opsiyonel)
+`.env`'de `DASHBOARD_PASSWORD` tanımlarsan bot açılırken bir web paneli de başlar
+(varsayılan port 3000, `PORT` ile değiştirilir). Tarayıcıdan `http://SUNUCU:PORT`:
+- Şifreyle giriş; bugünkü tweet/cevap sayıları, **son aktivite**, **bekleyen
+  mention'lar** ve **⏸️ Duraklat / ▶️ Devam**.
+- `DASHBOARD_PASSWORD` boşsa panel kapalıdır. Panel botu kontrol ettiği için
+  **mutlaka HTTPS arkasında** çalıştır (Railway HTTPS verir; düz VPS'te TLS reverse proxy).
+
+> Composer (panelden tweet/thread üret-gönder), mention onay aksiyonları ve ayar
+> düzenleme bir sonraki dilimde gelecek.
+
 ## Ayarlar — sadece `config.js`
 - `model` — içeriği yazan Claude modeli. Varsayılan `claude-sonnet-4-6` (çok iyi
   kalite, Opus'tan kat kat ucuz); en yüksek kalite için `claude-opus-4-8`, en ucuz
