@@ -1,33 +1,21 @@
-const OpenAI = require("openai");
+const Anthropic = require("@anthropic-ai/sdk");
 const config = require("../config");
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Reads ANTHROPIC_API_KEY from the environment.
+const client = new Anthropic();
 
-// One chat call. Model-agnostic: newer models want `max_completion_tokens`,
-// older gpt-4.x want `max_tokens` — try the modern param, fall back if rejected.
-// So you can change config.model freely without touching code.
-const MAX_OUT = 500;
+// One chat call via the Anthropic Messages API. `system` is a top-level param
+// (not a message), and the reply text is in the first text content block.
+const MAX_OUT = 1000;
 async function chat(system, user) {
-  const base = {
+  const res = await client.messages.create({
     model: config.model,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  };
-  try {
-    const res = await client.chat.completions.create({
-      ...base,
-      max_completion_tokens: MAX_OUT,
-    });
-    return (res.choices?.[0]?.message?.content || "").trim();
-  } catch (e) {
-    if (!/max_completion_tokens|max_tokens|unsupported|unknown|parameter/i.test(e.message || "")) {
-      throw e;
-    }
-    const res = await client.chat.completions.create({ ...base, max_tokens: MAX_OUT });
-    return (res.choices?.[0]?.message?.content || "").trim();
-  }
+    max_tokens: MAX_OUT,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  const block = (res.content || []).find((b) => b.type === "text");
+  return (block?.text || "").trim();
 }
 
 // Shared "write like a real person" guide, layered on top of the user's
@@ -110,6 +98,21 @@ function agendaBlock(trends) {
 const clean = (s) => (s || "").replace(/^["']|["']$/g, "").trim();
 const clip = (s) => (s.length > 280 ? s.slice(0, 277) + "..." : s);
 
+// Second pass: a strict editor rewrites the draft to be punchier and more
+// human. Returns the original if anything goes wrong. Gated by config.refineTweets.
+async function refine(draft, recent = []) {
+  const user =
+    "Şu tweet taslağını sert bir editör gözüyle değerlendir ve DAHA İYİSİNİ yaz:\n\n" +
+    `"${draft}"\n\n` +
+    "Sor: Hook ilk kelimelerde tutuyor mu? Spesifik mi yoksa klişe/yapay mı? Daha " +
+    "vurucu, daha insani, daha paylaşılası olur mu? Gerekiyorsa baştan yaz; zaten " +
+    "güçlüyse olduğu gibi bırak. Kurallar: link yok, 280'i geçme, en fazla 1 doğal " +
+    "hashtag. Sadece final tweet metnini ver, açıklama yazma." +
+    avoidBlock(recent);
+  const out = clip(clean(await chat(tweetSystem(), user)));
+  return out || draft;
+}
+
 // Generate one original tweet. `topic` is an optional hint; `context` is the
 // optional current agenda (enriched trends) for timeliness. Backward compatible.
 async function generateTweet(recent = [], topic = null, context = []) {
@@ -129,7 +132,9 @@ async function generateTweet(recent = [], topic = null, context = []) {
     agendaBlock(context) +
     avoidBlock(recent);
 
-  return clip(clean(await chat(tweetSystem(), user)));
+  let out = clip(clean(await chat(tweetSystem(), user)));
+  if (config.refineTweets && out) out = await refine(out, recent);
+  return out;
 }
 
 // Generate a tweet tied to a *safe, broad* Türkiye trend, grounded in real
@@ -179,9 +184,11 @@ async function generateTrendTweet(trends, recent = []) {
     avoidBlock(recent) +
     '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';
 
-  const out = clean(await chat(tweetSystem(), user));
+  let out = clean(await chat(tweetSystem(), user));
   if (!out || out.toUpperCase() === "SKIP") return null;
-  return clip(out);
+  out = clip(out);
+  if (config.refineTweets) out = await refine(out, recent);
+  return out;
 }
 
 // Draft a reply to a mention. `recent` (your last tweets) is used so the reply

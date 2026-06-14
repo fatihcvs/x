@@ -3,14 +3,17 @@
 // =====================================================================
 
 module.exports = {
-  // --- Which OpenAI model writes your content -------------------------
+  // --- Which Claude model writes your content (Anthropic API) ---------
   // Daha güçlü model = daha insani, daha kaliteli tweet (büyüme için önerilir).
-  // Kod model-bağımsızdır: token parametresini otomatik ayarlar, bu yüzden bu
-  // değeri istediğin modelle değiştirebilirsin (kod düzenlemeye gerek yok).
-  //   gpt-4o      -> güçlü, doğal yazım (varsayılan, önerilen)
-  //   gpt-4o-mini -> en ucuz, idare eder
-  //   daha yeni bir model (hesabında varsa) -> sadece adını buraya yaz
-  model: "gpt-4o",
+  //   claude-opus-4-8   -> en yetenekli, en doğal yazım (varsayılan)
+  //   claude-sonnet-4-6 -> çok iyi + daha ucuz (dengeli)
+  //   claude-haiku-4-5  -> en hızlı/ucuz, basit içerik
+  // Modeli değiştirmek için sadece adını değiştir (kod düzenlemeye gerek yok).
+  model: "claude-opus-4-8",
+
+  // İkinci bir "editör" turuyla her tweet'i cilalar (kalite ↑). Tweet başına
+  // model maliyetini ~2x yapar; kapatmak için false.
+  refineTweets: true,
 
   // --- Your Kick channel ----------------------------------------------
   kickUsername: "thepublisher",
