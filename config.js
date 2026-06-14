@@ -97,6 +97,11 @@ BÜYÜME İÇİN İYİ TWEET PRENSİPLERİ:
   // --- Mention checking -----------------------------------------------
   mentionPollCron: "*/15 * * * *", // every 15 minutes
 
+  // --- Daily digest (Telegram) ---------------------------------------
+  // Her gün bu saatte (timezone'a göre) "bugün ne yaptım" özeti gönderir.
+  // Kapatmak için bu satırı sil.
+  digestCron: "0 23 * * *", // 23:00
+
   // --- Safety caps (human, ban-safe pace) -----------------------------
   maxTweetsPerDay: 6,
   maxRepliesPerDay: 20,

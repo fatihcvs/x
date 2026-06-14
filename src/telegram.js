@@ -272,6 +272,35 @@ bot.onText(/^\/thread(?:@\w+)?(?:\s+([\s\S]+))?$/, (msg, match) => {
   startDraft("thread", topic);
 });
 
+// /pause, /resume, /stats — control panel
+bot.onText(/^\/pause(?:@\w+)?\s*$/, (msg) => {
+  if (!isOwner(msg)) return;
+  db.setMeta("paused", "1");
+  notify(
+    "⏸️ Otomatik tweet'ler duraklatıldı. /resume ile aç.\n" +
+      "(Manuel komutlar ve mention onayı çalışmaya devam eder.)"
+  );
+});
+
+bot.onText(/^\/resume(?:@\w+)?\s*$/, (msg) => {
+  if (!isOwner(msg)) return;
+  db.setMeta("paused", "0");
+  notify("▶️ Otomatik tweet'ler tekrar aktif.");
+});
+
+bot.onText(/^\/stats(?:@\w+)?\s*$/, (msg) => {
+  if (!isOwner(msg)) return;
+  const tweets = db.countToday("tweet");
+  const replies = db.countToday("reply");
+  const paused = db.getMeta("paused") === "1";
+  notify(
+    "📊 Bugün\n" +
+      `• Tweet: ${tweets}/${config.maxTweetsPerDay}\n` +
+      `• Cevap: ${replies}/${config.maxRepliesPerDay}\n` +
+      `• Durum: ${paused ? "⏸️ duraklatılmış" : "▶️ aktif"}`
+  );
+});
+
 // /help or /start — list the available commands
 const HELP =
   "🤖 Co-pilot komutları:\n\n" +
@@ -279,6 +308,9 @@ const HELP =
   "/tweet <konu> — verdiğin konu/ipucu etrafında taslak üret\n" +
   "/trend — uygun (hafif/güvenli) bir Türkiye trendine göre taslak üret\n" +
   "/thread <konu> — konu üzerine 3-5 tweet'lik thread taslağı üret\n" +
+  "/pause — otomatik tweet'leri duraklat\n" +
+  "/resume — otomatik tweet'leri tekrar başlat\n" +
+  "/stats — bugünkü tweet/cevap sayıları ve durum\n" +
   "/help — bu mesajı göster\n\n" +
   "Her taslakta ✅ Gönder / 🔄 Yeniden üret / ❌ İptal butonları gelir.\n" +
   "Mention'lar ayrıca otomatik olarak onayına düşer (komut gerekmez).";
@@ -294,6 +326,9 @@ bot
     { command: "tweet", description: "Tweet taslağı üret (konu opsiyonel)" },
     { command: "trend", description: "Uygun Türkiye trendine göre taslak üret" },
     { command: "thread", description: "3-5 tweet'lik thread taslağı üret" },
+    { command: "pause", description: "Otomatik tweet'leri duraklat" },
+    { command: "resume", description: "Otomatik tweet'leri başlat" },
+    { command: "stats", description: "Bugünkü sayıları göster" },
     { command: "help", description: "Komutları göster" },
   ])
   .catch(() => {});

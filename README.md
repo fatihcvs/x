@@ -94,6 +94,9 @@ En ucuz iki yol:
 - **`/trend`** — o an uygun (hafif/güvenli) bir Türkiye trendine göre taslak üretir.
 - **`/thread <konu>`** — konu üzerine 3-5 tweet'lik bir **thread** (zincir) taslağı üretir.
   Gönderilirse tweet'ler zincir olarak atılır ve her biri günlük limite sayılır.
+- **`/pause`** / **`/resume`** — otomatik (zamanlı) tweet'leri duraklat/başlat.
+  Manuel komutlar ve mention onayı çalışmaya devam eder.
+- **`/stats`** — bugünkü tweet/cevap sayıları ve aktif/duraklatılmış durumu gösterir.
 - **`/help`** — komut listesini gösterir (komutlar Telegram'ın `/` menüsünde de görünür).
 
 Her taslakta **✅ Gönder / 🔄 Yeniden üret / ❌ İptal** butonları gelir. Gönderilen
@@ -114,6 +117,8 @@ senin sohbetinden (`TELEGRAM_CHAT_ID`) çalışır.
 - `tweetSchedule` / `timezone` — otomatik tweet saatleri (cron) ve saat dilimi.
   Varsayılan TR zirve saatleri (09:00, 12:30, 19:30, 22:30) ve `Europe/Istanbul`;
   sunucu UTC'de olsa bile tweet'ler TR saatine göre atılır.
+- `digestCron` — her gün bu saatte (timezone'a göre) Telegram'a günlük özet
+  (bugün kaç tweet/cevap, aktif mi) gönderir. Varsayılan 23:00; kapatmak için sil.
 - `maxTweetsPerDay` / `maxRepliesPerDay` — güvenli sınırlar.
 - `trendsEnabled` — `true` ise zamanlanmış tweet'ler uygun bir **Türkiye trendine**
   bağlanır (hassas konular atlanır); uygun trend yoksa normal tweet atılır. `/trend`

@@ -9,6 +9,7 @@ const { notify, sendSuggestion } = require("./telegram");
 // --- Post one original tweet (respecting the daily cap) ----------------
 async function runTweetJob() {
   try {
+    if (db.getMeta("paused") === "1") return; // /pause: skip auto-posting silently
     if (db.countToday("tweet") >= config.maxTweetsPerDay) {
       return notify("⏸️ Günlük tweet limiti dolu, atlandı.");
     }
@@ -78,14 +79,32 @@ async function runMentionJob() {
   }
 }
 
+// --- Daily digest: report today's activity to Telegram ------------------
+async function runDigest() {
+  try {
+    const tweets = db.countToday("tweet");
+    const replies = db.countToday("reply");
+    const paused = db.getMeta("paused") === "1";
+    notify(
+      "🌙 Günlük özet\n" +
+        `• Tweet: ${tweets}/${config.maxTweetsPerDay}\n` +
+        `• Cevap: ${replies}/${config.maxRepliesPerDay}\n` +
+        `• Durum: ${paused ? "⏸️ duraklatılmış" : "▶️ aktif"}`
+    );
+  } catch (e) {
+    notify("⚠️ Özet hatası: " + e.message);
+  }
+}
+
 function start() {
   const opts = config.timezone ? { timezone: config.timezone } : {};
   config.tweetSchedule.forEach((expr) => cron.schedule(expr, runTweetJob, opts));
   cron.schedule(config.mentionPollCron, runMentionJob, opts);
+  if (config.digestCron) cron.schedule(config.digestCron, runDigest, opts);
   console.log(
     `[scheduler] ${config.tweetSchedule.length} tweet slot(s) ` +
       `(${config.timezone || "server time"}), mentions every: ${config.mentionPollCron}`
   );
 }
 
-module.exports = { start, runTweetJob, runMentionJob };
+module.exports = { start, runTweetJob, runMentionJob, runDigest };
