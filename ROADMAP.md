@@ -37,7 +37,7 @@ GitHub'da (`fatihcvs/x`, `main`):
 | 4 | **Gerçek gündem analizi:** trendleri getdaytrends.com'dan, "neden trend?" bağlamını Google News (TR) RSS'inden çeker; hassas/çözülemeyen trendleri atlar. | ✅ |
 | 5 | **İnsani içerik katmanı:** model yazmadan önce "gerçek biri ne atardı" diye düşünür; yapay zeka klişelerinden kaçınır; tüm gündem (trend+haber) normal tweet'lere de arka plan olur. | ✅ |
 | 6 | **Büyüme/influencer stratejisi + zirve saat zamanlaması:** TR zirve saatleri + doğru saat dilimi (Europe/Istanbul). | ✅ |
-| 7 | **Model: OpenAI → Claude (Anthropic) geçişi:** `claude-opus-4-8` + ikinci "editör" cilası (`refineTweets`). | ✅ |
+| 7 | **Model: OpenAI → Claude (Anthropic) geçişi** + ikinci "editör" cilası (`refineTweets`). Varsayılan maliyet/kalite dengesi için `claude-sonnet-4-6`. | ✅ |
 | 8 | **Thread'ler:** `/thread <konu>` → 3-5 tweet'lik AI zinciri, onaylı gönderim. | ✅ |
 | 9 | **Kontrol paneli (Telegram) + günlük özet:** `/pause`, `/resume`, `/stats` ve her akşam özet. | ✅ |
 | 10 | **Performans öğrenme döngüsü:** kendi en çok tutan tweet'lerini okuyup üretime besler (`learnFromMetrics`). | ✅ |
@@ -153,8 +153,8 @@ ve nereye gittiğimiz dökümana bakınca daima güncel görünür.
 ## 6. Yatay konular (her fazda geçerli)
 
 - **Güvenlik:** panel şifresi + HTTPS; SaaS'ta şifreli creds + kullanıcı izolasyonu.
-- **Maliyet:** Claude (Opus) + X API + hosting; SaaS'ta DB/altyapı. Model ve
-  `refineTweets` ile maliyet ayarlanabilir.
+- **Maliyet:** Claude (varsayılan `claude-sonnet-4-6` — Opus'tan kat kat ucuz) +
+  X API + hosting; SaaS'ta DB/altyapı. Model seçimi ve `refineTweets` ile ayarlanır.
 - **Yasal/ToS:** her platformun otomasyon kuralları (ban riski); başkalarının
   verisini tutunca KVKK/GDPR sorumluluğu doğar.
 - **Bakım:** çok platform = çok sayıda dış API'yi takip etmek.

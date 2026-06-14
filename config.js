@@ -4,12 +4,11 @@
 
 module.exports = {
   // --- Which Claude model writes your content (Anthropic API) ---------
-  // Daha güçlü model = daha insani, daha kaliteli tweet (büyüme için önerilir).
-  //   claude-opus-4-8   -> en yetenekli, en doğal yazım (varsayılan)
-  //   claude-sonnet-4-6 -> çok iyi + daha ucuz (dengeli)
-  //   claude-haiku-4-5  -> en hızlı/ucuz, basit içerik
   // Modeli değiştirmek için sadece adını değiştir (kod düzenlemeye gerek yok).
-  model: "claude-opus-4-8",
+  //   claude-sonnet-4-6 -> çok iyi kalite + Opus'tan kat kat ucuz (VARSAYILAN, dengeli)
+  //   claude-opus-4-8   -> en yetenekli ama belirgin pahalı
+  //   claude-haiku-4-5  -> en ucuz/hızlı, kaliteden biraz feda
+  model: "claude-sonnet-4-6",
 
   // İkinci bir "editör" turuyla her tweet'i cilalar (kalite ↑). Tweet başına
   // model maliyetini ~2x yapar; kapatmak için false.
