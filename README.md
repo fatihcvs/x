@@ -8,8 +8,8 @@ X (Twitter) hesabını büyütmek için AI asistanı. İçerik **Anthropic (Clau
 - **Mention'lar:** otomatik DEĞİL. Biri yazınca AI cevap taslağı hazırlar, Telegram'a
   düşer. **✅ Gönder** / **❌ Geç**. Mesajı yanıtlayıp kendi metnini de yollayabilirsin.
 - **Beğeni / takip yok:** hesap ban'ını tetikleyen kısım bu, bilerek eklenmedi.
-- **Manuel tweet:** Telegram'dan `/tweet`, `/tweet <konu>` veya `/trend` ile
-  istediğin an taslak üret → **✅ Gönder / 🔄 Yeniden üret / ❌ İptal**.
+- **Manuel içerik:** Telegram'dan `/tweet`, `/tweet <konu>`, `/trend` veya
+  `/thread <konu>` ile istediğin an taslak üret → **✅ Gönder / 🔄 Yeniden üret / ❌ İptal**.
 - **Trend farkındalığı:** otomatik tweet'ler, güncel **Türkiye haberleriyle bağlam
   kurarak** uygun (hafif/güvenli) bir trende bağlanır — trendin neden gündemde
   olduğunu analiz eder, hassas/çözülemeyen trendleri atlar, uygun yoksa normal atar.
@@ -92,6 +92,8 @@ En ucuz iki yol:
 - **`/tweet`** — persona + rastgele formatla bir tweet taslağı üretir.
 - **`/tweet <konu>`** — verdiğin konu/ipucu etrafında taslak üretir.
 - **`/trend`** — o an uygun (hafif/güvenli) bir Türkiye trendine göre taslak üretir.
+- **`/thread <konu>`** — konu üzerine 3-5 tweet'lik bir **thread** (zincir) taslağı üretir.
+  Gönderilirse tweet'ler zincir olarak atılır ve her biri günlük limite sayılır.
 - **`/help`** — komut listesini gösterir (komutlar Telegram'ın `/` menüsünde de görünür).
 
 Her taslakta **✅ Gönder / 🔄 Yeniden üret / ❌ İptal** butonları gelir. Gönderilen

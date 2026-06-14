@@ -191,6 +191,32 @@ async function generateTrendTweet(trends, recent = []) {
   return out;
 }
 
+// Generate a 3-5 tweet thread (array of strings) on a topic. Growth-oriented,
+// human, no links, each part <=280. Returns [] when nothing usable.
+async function generateThread(topic = null, recent = [], context = []) {
+  const topicLine = topic
+    ? `\n\nKonu/ipucu: ${topic}`
+    : "\n\nKonuyu sen seç: gündeme ve persona'na uygun, geniş kitleye hitap eden bir şey.";
+
+  const user =
+    "Tek tweet değil, 3-5 tweet'lik bir THREAD (zincir) yaz. Büyüme ve etkileşim odaklı.\n" +
+    "- İlk tweet en güçlü HOOK olsun; tek başına merak uyandırsın, 'devamı aşağıda' gibi klişe yok.\n" +
+    "- Her tweet kendi içinde anlamlı ve akıcı; birlikte bir fikri derinleştirsin.\n" +
+    "- Son tweet vurucu bir kapanış ya da cevap çağıran bir soru olsun.\n" +
+    "- Her tweet en fazla 280 karakter, link/URL yok, en fazla 1 doğal hashtag." +
+    topicLine +
+    agendaBlock(context) +
+    avoidBlock(recent) +
+    "\n\nÇIKTI BİÇİMİ: yalnızca tweet metinleri; her tweet'in arasına AYRI bir satırda `---` koy. Numara, etiket veya açıklama ekleme.";
+
+  const raw = await chat(tweetSystem(), user);
+  return raw
+    .split(/\n\s*-{3,}\s*\n/)
+    .map((s) => clip(clean(s)))
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
 // Draft a reply to a mention. `recent` (your last tweets) is used so the reply
 // keeps your voice. May return "SKIP" for low-value mentions.
 async function draftReply(mention, recent = []) {
@@ -215,4 +241,4 @@ async function draftReply(mention, recent = []) {
   return clip(reply);
 }
 
-module.exports = { chat, generateTweet, generateTrendTweet, draftReply };
+module.exports = { chat, generateTweet, generateTrendTweet, generateThread, draftReply };

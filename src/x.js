@@ -30,6 +30,21 @@ async function replyTo(tweetId, text) {
   return res.data;
 }
 
+// Post a thread: first tweet, then each next as a reply to the previous one.
+// Returns the array of created tweet ids.
+async function postThread(texts) {
+  const ids = [];
+  let lastId = null;
+  for (const text of texts) {
+    const res = lastId
+      ? await rw.v2.tweet(text, { reply: { in_reply_to_tweet_id: lastId } })
+      : await rw.v2.tweet(text);
+    lastId = res.data.id;
+    ids.push(lastId);
+  }
+  return ids;
+}
+
 // Returns new mentions since the last seen id (oldest -> newest)
 async function getNewMentions(sinceId) {
   const userId = await getUserId();
@@ -57,4 +72,4 @@ async function getNewMentions(sinceId) {
     .reverse(); // process oldest first
 }
 
-module.exports = { getUserId, postTweet, replyTo, getNewMentions };
+module.exports = { getUserId, postTweet, replyTo, postThread, getNewMentions };
