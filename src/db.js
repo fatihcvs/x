@@ -145,6 +145,15 @@ const getMeta = (userId, key) => {
   return row ? row.value : null;
 };
 
+const getAllMeta = (userId) => {
+  const rows = db.prepare("SELECT key, value FROM user_meta WHERE user_id = ?").all(userId);
+  const result = {};
+  for (const r of rows) {
+    result[r.key] = r.value;
+  }
+  return result;
+};
+
 const setMeta = (userId, key, value) => {
   db.prepare(
     "INSERT INTO user_meta(user_id, key, value) VALUES(?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value"
@@ -259,6 +268,7 @@ const setUserPlatform = (userId, platformId, accessToken, refreshToken, username
 
 module.exports = {
   getMeta,
+  getAllMeta,
   setMeta,
   countToday,
   countTodayByPlatform,
