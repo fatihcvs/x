@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Twitter Copilot - X Kitlenizi Otomatik Büyütün</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <nav>
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path>
+            </svg>
+            Copilot
+        </div>
+        <div class="nav-links">
+            <a href="#features">Özellikler</a>
+            <a href="#pricing">Fiyatlandırma</a>
+            <button class="btn btn-secondary" onclick="openLogin()">Giriş Yap</button>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="badge">🚀 Yeni: AI Trend Analizi Aktif</div>
+        <h1>X (Twitter) kitlenizi <span>otomatik pilota</span> bağlayın</h1>
+        <p>İçerik üretmek, trendleri yakalamak ve etkileşim kasmak için saatlerinizi harcamayın. Yapay zekanın gücüyle büyümenizi hızlandırın.</p>
+        <div class="hero-cta">
+            <button class="btn btn-primary" onclick="openLogin()">Ücretsiz Başla</button>
+            <a href="#features" class="btn btn-secondary">Nasıl Çalışır?</a>
+        </div>
+
+        <div class="dashboard-preview">
+            <div class="dashboard-header">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div style="padding: 4rem 2rem; text-align: center;">
+                <h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Admin Paneline Hoş Geldiniz</h3>
+                <p>Güçlü araçlarımızı kullanmaya başlamak için giriş yapın veya kayıt olun.</p>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="feature-card">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"></path></svg>
+            </div>
+            <h3>Gelişmiş Trend Analizi</h3>
+            <p>Sektörünüzdeki trendleri sizin için saniyeler içinde analiz eder ve en yüksek etkileşim potansiyeli olan tweet taslakları oluşturur.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <h3>Akıllı Otomatik Yanıtlar</h3>
+            <p>Bahsedilmelerinize (mentions) ve mesajlarınıza anında akıllı ve bağlama uygun yanıtlar vererek etkileşimi sıcak tutun.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+            <h3>AI ile İçerik Üretimi</h3>
+            <p>Claude 3.5 Sonnet desteği ile tarzınıza ve kurumsal kimliğinize uygun, dikkat çekici tweetler ve floodlar yazdırın.</p>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeLogin()">&times;</button>
+            <h2>Panele Giriş</h2>
+            <p>Kaldığınız yerden devam edin.</p>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>E-posta</label>
+                    <input type="email" id="email" required placeholder="admin@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Şifre</label>
+                    <input type="password" id="password" required placeholder="••••••••">
+                </div>
+                <div id="loginError" style="color: var(--danger); margin-bottom: 1rem; font-size: 0.875rem;" class="hidden"></div>
+                <button type="submit" class="btn btn-primary" id="loginBtn">Giriş Yap</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openLogin() {
+            document.getElementById('loginModal').classList.add('active');
+        }
+        function closeLogin() {
+            document.getElementById('loginModal').classList.remove('active');
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            const errorDiv = document.getElementById('loginError');
+            
+            btn.textContent = 'Giriş yapılıyor...';
+            btn.disabled = true;
+            errorDiv.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                
+                if (data.ok) {
+                    window.location.href = '/dashboard';
+                } else {
+                    errorDiv.textContent = data.error || 'Giriş başarısız';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Bir hata oluştu';
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.textContent = 'Giriş Yap';
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

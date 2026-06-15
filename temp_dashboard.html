@@ -1,0 +1,376 @@
+`<!doctype html>
+<html lang="tr"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Co-pilot Panel</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--bd:#272b36;--fg:#e6e8ee;--mut:#9aa3b2;--acc:#3b82f6;--ok:#22c55e;--warn:#f59e0b;--danger:#ef4444}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+.wrap{max-width:760px;margin:0 auto;padding:20px}h1{font-size:18px;margin:0}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.sp{flex:1}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.stat .n{font-size:26px;font-weight:700}.stat .l{color:var(--mut);font-size:13px}
+.badge{padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}.badge.warn{background:rgba(245,158,11,.15);color:var(--warn)}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--bd);color:var(--fg)}button:disabled{opacity:.5;cursor:default}
+input,select,textarea{background:#0b0d12;border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:10px 12px;font-size:15px;font-family:inherit;}
+input[type="checkbox"]{width:auto;}
+input,textarea{width:100%}select{flex:0 0 auto}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.item{border:1px solid var(--bd);border-radius:8px;padding:10px 12px}
+.item .meta{color:var(--mut);font-size:12px;margin-bottom:4px}.muted{color:var(--mut)}
+h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px}
+.hidden{display:none !important}.err{color:var(--danger);font-size:14px;min-height:18px}
+.pre{white-space:pre-wrap}
+</style></head><body><div class="wrap">
+
+<div id="auth" class="card hidden">
+<h1>🤖 Co-pilot SaaS</h1><p class="muted">Giriş yapın veya yeni hesap oluşturun.</p>
+<div class="row"><input id="auth_email" type="email" placeholder="E-posta" /></div>
+<div class="row" style="margin-top:10px;"><input id="auth_pw" type="password" placeholder="Şifre" /></div>
+<div class="err" id="authErr" style="margin-top:5px;"></div>
+<div class="row" style="margin-top:10px;">
+  <button id="loginBtn">Giriş Yap</button>
+  <button id="registerBtn" class="ghost">Kayıt Ol</button>
+</div>
+</div>
+
+<div id="dash" class="hidden">
+<div class="row"><h1>🤖 Co-pilot</h1><span id="status" class="badge ok">aktif</span>
+<span class="sp"></span><span class="muted" id="model"></span></div>
+<div class="grid">
+<div class="card stat"><div class="n" id="tw">–</div><div class="l">Bugün tweet</div></div>
+<div class="card stat"><div class="n" id="rp">–</div><div class="l">Bugün cevap</div></div></div>
+<div class="row"><button id="pauseBtn" class="ghost">⏸️ Duraklat</button>
+<button id="resumeBtn" class="ghost">▶️ Devam</button><span class="sp"></span>
+<button id="settingsBtn" class="ghost">⚙️ Ayarlar</button>
+<button id="refreshBtn" class="ghost">↻ Yenile</button><button id="logoutBtn" class="ghost">Çıkış</button></div>
+
+<h2>Yeni içerik</h2>
+<div class="card">
+<div class="row"><select id="mode">
+<option value="manual">Tweet</option><option value="trend">Trend tweet</option><option value="thread">Thread</option>
+</select><input id="topic" placeholder="Konu (opsiyonel)" /><button id="genBtn">Üret</button></div>
+<div class="err" id="genErr"></div>
+<div id="preview" class="hidden">
+<div id="previewBody" class="item pre" style="margin-top:10px"></div>
+<div class="row" style="margin-top:8px"><button id="sendBtn">✅ Gönder</button>
+<button id="regenBtn" class="ghost">🔄 Yeniden</button><button id="cancelBtn" class="ghost">❌ İptal</button></div>
+</div></div>
+
+<h2>Bekleyen mention'lar</h2><div id="pending" class="list"></div>
+<h2>Son aktivite</h2><div id="activity" class="list"></div>
+</div>
+
+<div id="settingsView" class="hidden">
+<div class="row"><h1>⚙️ Ayarlar</h1><span class="sp"></span><button id="closeSettingsBtn" class="ghost">← Geri</button></div>
+<p class="muted">Aşağıdaki bilgileri doldurarak hesaplarınızı ve yapay zeka yapılandırmanızı yönetin.</p>
+<div class="card list">
+  <div style="margin-top:8px;margin-bottom:8px;"><label class="muted">Aktif Platformlar (Eşzamanlı Gönderim)</label>
+    <div><label><input id="set_platform_x" type="checkbox" /> X (Twitter)</label></div>
+    <div><label><input id="set_platform_threads" type="checkbox" /> Threads</label></div>
+    <div><label><input id="set_platform_instagram" type="checkbox" /> Instagram (Resim/Reels Zorunlu)</label></div>
+  </div>
+  
+  <h2>Platform Bağlantıları</h2>
+  <div><label class="muted">X Access Token</label><br><input id="set_x_token" /></div>
+  <div><label class="muted">X Access Secret</label><br><input id="set_x_secret" type="password" /></div>
+  
+  <div style="margin-top:10px"><label class="muted">Threads Kullanıcı ID</label><br><input id="set_threads_user" /></div>
+  <div><label class="muted">Threads Access Token</label><br><input id="set_threads_token" type="password" /></div>
+  
+  <div style="margin-top:10px"><label class="muted">Instagram Hesap ID (Graph API)</label><br><input id="set_instagram_user" /></div>
+  <div><label class="muted">Instagram Access Token</label><br><input id="set_instagram_token" type="password" /></div>
+  
+  <h2>Bot Ayarları</h2>
+  <div><label class="muted">Telegram Chat ID (Bildirimler için)</label><br><input id="set_tg_chat" /></div>
+  <div><label class="muted">Model (örn: claude-3-5-sonnet-latest)</label><br><input id="set_model" /></div>
+  <div><label class="muted">Günlük Maksimum Tweet</label><br><input id="set_maxTweetsPerDay" type="number" /></div>
+  <div><label class="muted">Günlük Maksimum Cevap</label><br><input id="set_maxRepliesPerDay" type="number" /></div>
+  <div><label class="muted">Hesap Hedefi (accountGoal)</label><br><textarea id="set_accountGoal" rows="3"></textarea></div>
+  <div><label class="muted">Persona</label><br><textarea id="set_persona" rows="6"></textarea></div>
+  
+  <h2>Medya (Görsel/Video) Ayarları</h2>
+  <div><label class="muted">OpenAI API Key (DALL-E 3 Görsel Üretimi İçin)</label><br><input id="set_openai_key" type="password" /></div>
+  <div style="margin-top:8px"><label><input id="set_autoGenerateMedia" type="checkbox" /> Tüm gönderilerde otomatik görsel üret</label></div>
+
+  <div style="margin-top:16px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
+  <div><label><input id="set_trendsEnabled" type="checkbox" /> Trendlere Katıl (trendsEnabled)</label></div>
+  <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap</label></div>
+  
+  <div class="row" style="margin-top:16px"><button id="saveSettingsBtn">Kaydet</button><span id="set_msg" class="muted" style="margin-left:10px;"></span></div>
+</div>
+</div>
+
+<div id="adminView" class="hidden">
+  <div class="row"><h1>👑 Yönetim Paneli</h1><span class="sp"></span><button id="closeAdminBtn" class="ghost">← Geri</button></div>
+  <p class="muted">Sisteme kayıtlı tüm kullanıcıları ve abonelik paketlerini buradan yönetebilirsiniz.</p>
+  <div class="card">
+    <table id="adminUsersTable" style="width:100%; text-align:left; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--bd);">
+          <th style="padding:8px">ID</th><th style="padding:8px">Email</th><th style="padding:8px">Rol</th>
+          <th style="padding:8px">Bugün Tweet</th><th style="padding:8px">Paket</th><th style="padding:8px">İşlem</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const api=(p,o)=>fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o));
+const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const show=id=>{
+  $('#auth').classList.toggle('hidden',id!=='auth');
+  $('#dash').classList.toggle('hidden',id!=='dash');
+  $('#settingsView').classList.toggle('hidden',id!=='settings');
+  $('#adminView').classList.toggle('hidden',id!=='admin');
+};
+let draft=null;
+function renderContent(c){
+  let html = c.parts?c.parts.map((p,i)=>(i+1)+'. '+esc(p)).join('\\n\\n'):esc(c.text);
+  if (c.mediaUrl) html += '<br><br><img src="'+esc(c.mediaUrl)+'" style="max-width:100%; border-radius:8px;" />';
+  return html;
+}
+
+async function load(){
+  if(!$('#dash').classList.contains('hidden') || !$('#settingsView').classList.contains('hidden')) {} else return;
+  const r=await api('/api/stats');
+  if(r.status===401){show('auth');return;}
+  const s=await r.json();
+  if(!$('#dash').classList.contains('hidden')) {
+    $('#model').textContent=s.model + ' (' + s.plan.toUpperCase() + ')';
+    const formatStats = (d) => {
+      let str = d.today + ' / ' + d.max;
+      if (d.byPlatform && Object.keys(d.byPlatform).length) {
+        str += ' <span style="font-size:12px;color:var(--mut);">(' + Object.entries(d.byPlatform).map(([k,v])=>k+':'+v).join(', ') + ')</span>';
+      }
+      return str;
+    };
+    $('#tw').innerHTML=formatStats(s.tweets);
+    $('#rp').innerHTML=formatStats(s.replies);
+    const st=$('#status');st.textContent=s.paused?'duraklatılmış':'aktif';st.className='badge '+(s.paused?'warn':'ok');
+    $('#pauseBtn').disabled=s.paused;$('#resumeBtn').disabled=!s.paused;
+    
+    // UI limits based on subscription
+    const imgBtn = document.getElementById('btnImg');
+    if (imgBtn) {
+      if (!s.canUseMedia) {
+        imgBtn.disabled = true;
+        imgBtn.title = "Görsel üretimi Premium pakete özeldir.";
+      } else {
+        imgBtn.disabled = false;
+        imgBtn.title = "";
+      }
+    }
+
+    if (s.role === 'admin' && !document.getElementById('adminPanelBtn')) {
+      const btn = document.createElement('button');
+      btn.id = 'adminPanelBtn';
+      btn.className = 'ghost';
+      btn.textContent = '👑 Admin Paneli';
+      btn.onclick = () => { loadAdmin(); show('admin'); };
+      $('#resumeBtn').parentNode.insertBefore(btn, $('#settingsBtn'));
+    }
+
+    const [pa,ac]=await Promise.all([api('/api/pending').then(x=>x.json()),api('/api/activity').then(x=>x.json())]);
+    $('#pending').innerHTML=pa.pending.length?pa.pending.map(p=>'<div class="item"><div class="meta">['+(p.platform||'X')+'] @'+esc(p.author)+'</div>'+esc(p.mention_text)+'<div class="muted pre" style="margin-top:6px">🤖 '+esc(p.draft)+'</div><div class="row" style="margin-top:8px"><button data-id="'+p.id+'" data-act="approve">✅ Gönder</button><button class="ghost" data-id="'+p.id+'" data-act="reject">❌ Geç</button></div></div>').join(''):'<div class="muted">Bekleyen yok.</div>';
+    document.querySelectorAll('#pending button[data-id]').forEach(b=>{b.onclick=()=>act(Number(b.dataset.id),b.dataset.act);});
+    $('#activity').innerHTML=ac.posts.length?ac.posts.map(p=>'<div class="item"><div class="meta">['+(p.platform||'X')+'] '+(p.kind==='tweet'?'📤 gönderi':'💬 cevap')+' · '+new Date(p.at).toLocaleString('tr-TR')+'</div>'+esc(p.text)+'</div>').join(''):'<div class="muted">Henüz yok.</div>';
+  }
+}
+window.act=async(id,action)=>{const r=await api('/api/pending/'+id,{method:'POST',body:JSON.stringify({action})});const j=await r.json();if(!j.ok)alert(j.error||'Hata');load();};
+
+async function generate(withMedia=false){
+  $('#genErr').textContent='';$('#preview').classList.add('hidden');draft=null;
+  $('#genBtn').disabled=true;$('#genBtn').textContent='Üretiliyor...';
+  try{
+    const r=await api('/api/generate',{method:'POST',body:JSON.stringify({mode:$('#mode').value,topic:$('#topic').value,withMedia})});
+    const j=await r.json();
+    if(!j.ok){$('#genErr').textContent=j.error||'Üretilemedi.';return;}
+    draft=j.content;$('#previewBody').innerHTML=renderContent(draft);$('#preview').classList.remove('hidden');
+  }catch(e){$('#genErr').textContent='Hata: '+e.message;}
+  finally{$('#genBtn').disabled=false;$('#genBtn').textContent='Üret';}
+}
+$('#genBtn').onclick=()=>generate(false);
+const btnImg = document.createElement('button');
+btnImg.id = 'btnImg';
+btnImg.textContent = '🖼️ Görselli Üret';
+btnImg.style.marginLeft = '8px';
+btnImg.onclick = () => generate(true);
+$('#genBtn').parentNode.appendChild(btnImg);
+$('#regenBtn').onclick=()=>generate(!!(draft && draft.mediaUrl));
+$('#cancelBtn').onclick=()=>{$('#preview').classList.add('hidden');draft=null;};
+$('#sendBtn').onclick=async()=>{
+  if(!draft)return;$('#sendBtn').disabled=true;
+  const r=await api('/api/post',{method:'POST',body:JSON.stringify({content:draft})});const j=await r.json();
+  $('#sendBtn').disabled=false;
+  if(!j.ok){$('#genErr').textContent=j.error||'Gönderilemedi.';return;}
+  draft=null;$('#preview').classList.add('hidden');$('#topic').value='';load();
+};
+
+let currentSettings = {};
+async function loadSettings() {
+  const r = await api('/api/settings');
+  const j = await r.json();
+  if(!j.ok) return;
+  const d = j.data.defaults;
+  const o = j.data.overrides;
+  const get = k => o[k] !== undefined ? o[k] : d[k];
+  currentSettings = { defaults: d, overrides: o };
+  
+  const active = get('activePlatforms') || [];
+  $('#set_platform_x').checked = active.includes('x');
+  $('#set_platform_threads').checked = active.includes('threads');
+  $('#set_platform_instagram').checked = active.includes('instagram');
+  
+  $('#set_model').value = get('model') || '';
+  $('#set_maxTweetsPerDay').value = get('maxTweetsPerDay') || '';
+  $('#set_maxRepliesPerDay').value = get('maxRepliesPerDay') || '';
+  $('#set_accountGoal').value = get('accountGoal') || '';
+  $('#set_persona').value = get('persona') || '';
+  $('#set_tg_chat').value = get('telegramChatId') || '';
+  $('#set_openai_key').value = get('openAiApiKey') || '';
+  
+  $('#set_autoGenerateMedia').checked = !!get('autoGenerateMedia');
+  $('#set_refineTweets').checked = !!get('refineTweets');
+  $('#set_trendsEnabled').checked = !!get('trendsEnabled');
+  $('#set_autoReplySafeMentions').checked = !!get('autoReplySafeMentions');
+  
+  const x = j.platforms.x || {};
+  const t = j.platforms.threads || {};
+  const ig = j.platforms.instagram || {};
+  $('#set_x_token').value = x.access_token || '';
+  $('#set_x_secret').value = x.refresh_token || '';
+  $('#set_threads_user').value = t.username || '';
+  $('#set_threads_token').value = t.access_token || '';
+  $('#set_instagram_user').value = ig.username || '';
+  $('#set_instagram_token').value = ig.access_token || '';
+}
+
+$('#settingsBtn').onclick = () => { loadSettings(); show('settings'); };
+$('#closeSettingsBtn').onclick = () => { load(); show('dash'); };
+$('#closeAdminBtn').onclick = () => { load(); show('dash'); };
+
+async function loadAdmin() {
+  const r = await api('/api/admin/users');
+  const j = await r.json();
+  if (!j.ok) return alert(j.error);
+  const tb = $('#adminUsersTable tbody');
+  tb.innerHTML = j.users.map(u => 
+    '<tr style="border-bottom:1px solid var(--bd);"><td style="padding:8px">'+u.id+'</td>'+
+    '<td style="padding:8px">'+esc(u.email)+'</td>'+
+    '<td style="padding:8px"><span class="badge '+(u.role==='admin'?'warn':'ok')+'">'+u.role+'</span></td>'+
+    '<td style="padding:8px">'+u.tweetsToday+'</td>'+
+    '<td style="padding:8px">'+
+      '<select id="plan_'+u.id+'">'+
+        '<option value="free" '+(u.plan==='free'?'selected':'')+'>Free</option>'+
+        '<option value="pro" '+(u.plan==='pro'?'selected':'')+'>Pro</option>'+
+        '<option value="premium" '+(u.plan==='premium'?'selected':'')+'>Premium</option>'+
+      '</select>'+
+    '</td>'+
+    '<td style="padding:8px"><button onclick="updatePlan('+u.id+')">Ayarla</button></td></tr>'
+  ).join('');
+}
+
+window.updatePlan = async (id) => {
+  const plan = $('#plan_'+id).value;
+  const r = await api('/api/admin/users/'+id+'/plan', { method: 'POST', body: JSON.stringify({ plan }) });
+  const j = await r.json();
+  if (j.ok) alert('Kullanıcı planı güncellendi: ' + plan.toUpperCase());
+  else alert('Hata: ' + j.error);
+};
+
+$('#saveSettingsBtn').onclick = async () => {
+  $('#saveSettingsBtn').disabled = true;
+  $('#set_msg').textContent = 'Kaydediliyor...';
+  const cPayload = {};
+  
+  const active = [];
+  if ($('#set_platform_x').checked) active.push('x');
+  if ($('#set_platform_threads').checked) active.push('threads');
+  if ($('#set_platform_instagram').checked) active.push('instagram');
+  cPayload.activePlatforms = JSON.stringify(active) === JSON.stringify(currentSettings.defaults.activePlatforms) ? null : active;
+  
+  const vStr = (id, k) => { 
+    const val = $('#'+id).value; 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
+  };
+  const vNum = (id, k) => { 
+    const val = Number($('#'+id).value); 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
+  };
+  const vBool = (id, k) => { 
+    const val = $('#'+id).checked; 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
+  };
+
+  vStr('set_model', 'model');
+  vNum('set_maxTweetsPerDay', 'maxTweetsPerDay');
+  vNum('set_maxRepliesPerDay', 'maxRepliesPerDay');
+  vStr('set_accountGoal', 'accountGoal');
+  vStr('set_persona', 'persona');
+  vStr('set_tg_chat', 'telegramChatId');
+  vStr('set_openai_key', 'openAiApiKey');
+  vBool('set_autoGenerateMedia', 'autoGenerateMedia');
+  vBool('set_refineTweets', 'refineTweets');
+  vBool('set_trendsEnabled', 'trendsEnabled');
+  vBool('set_autoReplySafeMentions', 'autoReplySafeMentions');
+  
+  const payload = {
+    config: cPayload,
+    platforms: {
+      x: {
+        access_token: $('#set_x_token').value,
+        refresh_token: $('#set_x_secret').value
+      },
+      threads: {
+        username: $('#set_threads_user').value,
+        access_token: $('#set_threads_token').value
+      },
+      instagram: {
+        username: $('#set_instagram_user').value,
+        access_token: $('#set_instagram_token').value
+      }
+    }
+  };
+  
+  const r = await api('/api/settings', { method: 'POST', body: JSON.stringify(payload) });
+  const j = await r.json();
+  $('#saveSettingsBtn').disabled = false;
+  if (j.ok) {
+    $('#set_msg').textContent = 'Kaydedildi!';
+    setTimeout(() => $('#set_msg').textContent='', 3000);
+    loadSettings();
+  } else {
+    $('#set_msg').textContent = 'Hata: ' + j.error;
+  }
+};
+
+const handleAuth=async(endpoint)=>{
+  $('#authErr').textContent='';
+  const email=$('#auth_email').value;
+  const pw=$('#auth_pw').value;
+  if(!email || !pw) return $('#authErr').textContent='Lütfen bilgileri doldurun.';
+  const r=await api(endpoint,{method:'POST',body:JSON.stringify({email,password:pw})});
+  if(r.ok){$('#auth_pw').value='';show('dash');load();}
+  else{const j=await r.json();$('#authErr').textContent=j.error||'Bir hata oluştu.';}
+};
+$('#loginBtn').onclick=()=>handleAuth('/api/login');
+$('#registerBtn').onclick=()=>handleAuth('/api/register');
+$('#auth_pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click();});
+
+$('#pauseBtn').onclick=async()=>{await api('/api/pause',{method:'POST'});load();};
+$('#resumeBtn').onclick=async()=>{await api('/api/resume',{method:'POST'});load();};
+$('#refreshBtn').onclick=load;
+$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});show('auth');};
+
+api('/api/stats').then(r=>{if(r.ok){show('dash');load();}else show('auth');}).catch(()=>show('auth'));
+setInterval(()=>{load();},20000);
+</script></body></html>`;
+
+module.exports = { start, buildApp }

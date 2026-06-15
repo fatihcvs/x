@@ -1,0 +1,104 @@
+`<!doctype html>
+<html lang="tr"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Co-pilot Panel</title>
+<link rel='stylesheet' href='/css/dashboard.css'></head><body><div class="wrap">
+
+<div id="auth" class="card hidden">
+<h1>🤖 Co-pilot SaaS</h1><p class="muted">Giriş yapın veya yeni hesap oluşturun.</p>
+<div class="row"><input id="auth_email" type="email" placeholder="E-posta" /></div>
+<div class="row" style="margin-top:10px;"><input id="auth_pw" type="password" placeholder="Şifre" /></div>
+<div class="err" id="authErr" style="margin-top:5px;"></div>
+<div class="row" style="margin-top:10px;">
+  <button id="loginBtn">Giriş Yap</button>
+  <button id="registerBtn" class="ghost">Kayıt Ol</button>
+</div>
+</div>
+
+<div id="dash" class="hidden">
+<div class="row"><h1>🤖 Co-pilot</h1><span id="status" class="badge ok">aktif</span>
+<span class="sp"></span><span class="muted" id="model"></span></div>
+<div class="grid">
+<div class="card stat"><div class="n" id="tw">–</div><div class="l">Bugün tweet</div></div>
+<div class="card stat"><div class="n" id="rp">–</div><div class="l">Bugün cevap</div></div></div>
+<div class="row"><button id="pauseBtn" class="ghost">⏸️ Duraklat</button>
+<button id="resumeBtn" class="ghost">▶️ Devam</button><span class="sp"></span>
+<button id="settingsBtn" class="ghost">⚙️ Ayarlar</button>
+<button id="refreshBtn" class="ghost">↻ Yenile</button><button id="logoutBtn" class="ghost">Çıkış</button></div>
+
+<h2>Yeni içerik</h2>
+<div class="card">
+<div class="row"><select id="mode">
+<option value="manual">Tweet</option><option value="trend">Trend tweet</option><option value="thread">Thread</option>
+</select><input id="topic" placeholder="Konu (opsiyonel)" /><button id="genBtn">Üret</button></div>
+<div class="err" id="genErr"></div>
+<div id="preview" class="hidden">
+<div id="previewBody" class="item pre" style="margin-top:10px"></div>
+<div class="row" style="margin-top:8px"><button id="sendBtn">✅ Gönder</button>
+<button id="regenBtn" class="ghost">🔄 Yeniden</button><button id="cancelBtn" class="ghost">❌ İptal</button></div>
+</div></div>
+
+<h2>Bekleyen mention'lar</h2><div id="pending" class="list"></div>
+<h2>Son aktivite</h2><div id="activity" class="list"></div>
+</div>
+
+<div id="settingsView" class="hidden">
+<div class="row"><h1>⚙️ Ayarlar</h1><span class="sp"></span><button id="closeSettingsBtn" class="ghost">← Geri</button></div>
+<p class="muted">Aşağıdaki bilgileri doldurarak hesaplarınızı ve yapay zeka yapılandırmanızı yönetin.</p>
+<div class="card list">
+  <div style="margin-top:8px;margin-bottom:8px;"><label class="muted">Aktif Platformlar (Eşzamanlı Gönderim)</label>
+    <div><label><input id="set_platform_x" type="checkbox" /> X (Twitter)</label></div>
+    <div><label><input id="set_platform_threads" type="checkbox" /> Threads</label></div>
+    <div><label><input id="set_platform_instagram" type="checkbox" /> Instagram (Resim/Reels Zorunlu)</label></div>
+  </div>
+  
+  <h2>Platform Bağlantıları</h2>
+  <div><label class="muted">X Access Token</label><br><input id="set_x_token" /></div>
+  <div><label class="muted">X Access Secret</label><br><input id="set_x_secret" type="password" /></div>
+  
+  <div style="margin-top:10px"><label class="muted">Threads Kullanıcı ID</label><br><input id="set_threads_user" /></div>
+  <div><label class="muted">Threads Access Token</label><br><input id="set_threads_token" type="password" /></div>
+  
+  <div style="margin-top:10px"><label class="muted">Instagram Hesap ID (Graph API)</label><br><input id="set_instagram_user" /></div>
+  <div><label class="muted">Instagram Access Token</label><br><input id="set_instagram_token" type="password" /></div>
+  
+  <h2>Bot Ayarları</h2>
+  <div><label class="muted">Telegram Chat ID (Bildirimler için)</label><br><input id="set_tg_chat" /></div>
+  <div><label class="muted">Model (örn: claude-3-5-sonnet-latest)</label><br><input id="set_model" /></div>
+  <div><label class="muted">Günlük Maksimum Tweet</label><br><input id="set_maxTweetsPerDay" type="number" /></div>
+  <div><label class="muted">Günlük Maksimum Cevap</label><br><input id="set_maxRepliesPerDay" type="number" /></div>
+  <div><label class="muted">Hesap Hedefi (accountGoal)</label><br><textarea id="set_accountGoal" rows="3"></textarea></div>
+  <div><label class="muted">Persona</label><br><textarea id="set_persona" rows="6"></textarea></div>
+  
+  <h2>Medya (Görsel/Video) Ayarları</h2>
+  <div><label class="muted">OpenAI API Key (DALL-E 3 Görsel Üretimi İçin)</label><br><input id="set_openai_key" type="password" /></div>
+  <div style="margin-top:8px"><label><input id="set_autoGenerateMedia" type="checkbox" /> Tüm gönderilerde otomatik görsel üret</label></div>
+
+  <div style="margin-top:16px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
+  <div><label><input id="set_trendsEnabled" type="checkbox" /> Trendlere Katıl (trendsEnabled)</label></div>
+  <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap</label></div>
+  
+  <div class="row" style="margin-top:16px"><button id="saveSettingsBtn">Kaydet</button><span id="set_msg" class="muted" style="margin-left:10px;"></span></div>
+</div>
+</div>
+
+<div id="adminView" class="hidden">
+  <div class="row"><h1>👑 Yönetim Paneli</h1><span class="sp"></span><button id="closeAdminBtn" class="ghost">← Geri</button></div>
+  <p class="muted">Sisteme kayıtlı tüm kullanıcıları ve abonelik paketlerini buradan yönetebilirsiniz.</p>
+  <div class="card">
+    <table id="adminUsersTable" style="width:100%; text-align:left; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--bd);">
+          <th style="padding:8px">ID</th><th style="padding:8px">Email</th><th style="padding:8px">Rol</th>
+          <th style="padding:8px">Bugün Tweet</th><th style="padding:8px">Paket</th><th style="padding:8px">İşlem</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+<script src='/js/dashboard.js'></script></body></html>`;
+
+module.exports = { start, buildApp }
