@@ -18,7 +18,7 @@ async function getUserId() {
   return cachedUserId;
 }
 
-async function postTweet(text) {
+async function post(text) {
   const res = await rw.v2.tweet(text);
   return res.data; // { id, text }
 }
@@ -46,7 +46,7 @@ async function postThread(texts) {
 }
 
 // Returns new mentions since the last seen id (oldest -> newest)
-async function getNewMentions(sinceId) {
+async function getMentions(sinceId) {
   const userId = await getUserId();
   const params = {
     max_results: 20,
@@ -72,9 +72,8 @@ async function getNewMentions(sinceId) {
     .reverse(); // process oldest first
 }
 
-// Your own recent original tweets with engagement metrics (best-effort: needs
-// API read access). Newest first.
-async function getMyRecentTweets(max = 20) {
+// Your own recent original posts with engagement metrics. Newest first.
+async function getMyRecentPosts(max = 20) {
   const userId = await getUserId();
   const timeline = await rw.v2.userTimeline(userId, {
     max_results: Math.min(Math.max(max, 5), 100),
@@ -90,10 +89,12 @@ async function getMyRecentTweets(max = 20) {
 }
 
 module.exports = {
-  getUserId,
-  postTweet,
+  id: "x",
+  name: "X (Twitter)",
+  limits: { maxLen: 280, hasThreads: true, hasMentions: true },
+  post,
   replyTo,
   postThread,
-  getNewMentions,
-  getMyRecentTweets,
+  getMentions,
+  getMyRecentPosts,
 };

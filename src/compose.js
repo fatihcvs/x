@@ -1,10 +1,10 @@
 // Shared content service: generate a draft, post a tweet/thread, send a reply.
 // Used by the web panel. (The Telegram flow has equivalent logic inline; the two
 // will be unified into this service layer in the multi-user phase — ROADMAP Faz 3.)
-const config = require("../config");
+const config = require("./settings");
 const db = require("./db");
 const ai = require("./ai");
-const x = require("./x");
+const router = require("./platforms/index");
 const { getEnrichedTrends } = require("./trends");
 const { getLearnings } = require("./insights");
 
@@ -25,7 +25,7 @@ async function generateContent(mode, topic) {
   if (mode === "trend") {
     const trends = await getEnrichedTrends();
     if (!trends.length) return null;
-    const t = await ai.generateTrendTweet(trends, recent, learnings);
+    const t = await ai.generateTrendTweet(trends, recent, learnings, router.getMinLimits());
     return t ? { text: t } : null;
   }
 
@@ -39,11 +39,11 @@ async function generateContent(mode, topic) {
   }
 
   if (mode === "thread") {
-    const parts = await ai.generateThread(topic, recent, context, learnings);
+    const parts = await ai.generateThread(topic, recent, context, learnings, router.getMinLimits());
     return parts && parts.length ? { parts } : null;
   }
 
-  const text = await ai.generateTweet(recent, topic, context, learnings);
+  const text = await ai.generateTweet(recent, topic, context, learnings, router.getMinLimits());
   return text ? { text } : null;
 }
 
@@ -55,12 +55,19 @@ async function postContent(content) {
   if (need > remaining) {
     throw new Error(`Günlük tweet limiti yetersiz (gereken ${need}, kalan ${remaining}).`);
   }
+  const activePlatforms = router.getActive();
+  
   if (content.parts) {
-    await x.postThread(content.parts);
-    content.parts.forEach((p) => db.logPost("tweet", p));
+    for (const p of activePlatforms) {
+      if (!p.limits.hasThreads && activePlatforms.length > 1) continue; // Skip if it doesn't support threads
+      await p.postThread(content.parts);
+      content.parts.forEach((part) => db.logPost("tweet", part, p.id));
+    }
   } else {
-    await x.postTweet(content.text);
-    db.logPost("tweet", content.text);
+    for (const p of activePlatforms) {
+      await p.post(content.text);
+      db.logPost("tweet", content.text, p.id);
+    }
   }
   return need;
 }
@@ -71,8 +78,12 @@ async function sendReply(pending, text) {
     db.setPendingStatus(pending.id, "skipped");
     return { ok: false, reason: "Günlük cevap limiti dolu." };
   }
-  await x.replyTo(pending.mention_id, text);
-  db.logPost("reply", text);
+  
+  const targetPlatform = router.all[pending.platform || "x"];
+  if (!targetPlatform) return { ok: false, reason: "Bilinmeyen platform." };
+
+  await targetPlatform.replyTo(pending.mention_id, text);
+  db.logPost("reply", text, targetPlatform.id);
   db.setPendingStatus(pending.id, "sent");
   return { ok: true };
 }

@@ -1,5 +1,5 @@
 const Anthropic = require("@anthropic-ai/sdk");
-const config = require("../config");
+const config = require("./settings");
 
 // Reads ANTHROPIC_API_KEY from the environment.
 const client = new Anthropic();
@@ -96,45 +96,45 @@ function agendaBlock(trends) {
 }
 
 const clean = (s) => (s || "").replace(/^["']|["']$/g, "").trim();
-const clip = (s) => (s.length > 280 ? s.slice(0, 277) + "..." : s);
+const clip = (s, maxLen = 280) => (s.length > maxLen ? s.slice(0, maxLen - 3) + "..." : s);
 
 // Second pass: a strict editor rewrites the draft to be punchier and more
 // human. Returns the original if anything goes wrong. Gated by config.refineTweets.
-async function refine(draft, recent = []) {
+async function refine(draft, recent = [], limits = { maxLen: 280 }) {
   const user =
-    "Şu tweet taslağını sert bir editör gözüyle değerlendir ve DAHA İYİSİNİ yaz:\n\n" +
+    "Şu metin taslağını sert bir editör gözüyle değerlendir ve DAHA İYİSİNİ yaz:\n\n" +
     `"${draft}"\n\n` +
     "Sor: Hook ilk kelimelerde tutuyor mu? Spesifik mi yoksa klişe/yapay mı? Daha " +
     "vurucu, daha insani, daha paylaşılası olur mu? Gerekiyorsa baştan yaz; zaten " +
-    "güçlüyse olduğu gibi bırak. Kurallar: link yok, 280'i geçme, en fazla 1 doğal " +
-    "hashtag. Sadece final tweet metnini ver, açıklama yazma." +
+    `güçlüyse olduğu gibi bırak. Kurallar: link yok, ${limits.maxLen} karakteri geçme, en fazla 1 doğal ` +
+    "hashtag. Sadece final metnini ver, açıklama yazma." +
     avoidBlock(recent);
-  const out = clip(clean(await chat(tweetSystem(), user)));
+  const out = clip(clean(await chat(tweetSystem(), user)), limits.maxLen);
   return out || draft;
 }
 
 // Generate one original tweet. `topic` is an optional hint; `context` is the
 // optional current agenda (enriched trends) for timeliness. Backward compatible.
-async function generateTweet(recent = [], topic = null, context = [], learnings = "") {
+async function generateTweet(recent = [], topic = null, context = [], learnings = "", limits = { maxLen: 280 }) {
   const style = pickStyle();
   const styleLine = style ? `\n\nBu sefer şu format ruhunda yaz: ${style}` : "";
   const topicLine = topic
-    ? `\n\nBu tweet şu konu/ipucu etrafında olsun: ${topic}`
+    ? `\n\nBu içerik şu konu/ipucu etrafında olsun: ${topic}`
     : "";
 
   const user =
-    "Şu an atılacak tek bir tweet yaz. Önce kafanda 2-3 farklı açı düşün, en çok " +
+    "Şu an atılacak tek bir içerik yaz. Önce kafanda 2-3 farklı açı düşün, en çok " +
     "etkileşim alacak ve en doğal olanı seç; sonra SADECE onu yaz. Gerçek bir " +
     "insanın atacağı gibi doğal, spesifik ve güncel hissettirsin. Tırnak, açıklama " +
-    "veya düşünceni yazma. Link/URL ekleme." +
+    `veya düşünceni yazma. Link/URL ekleme. Maksimum ${limits.maxLen} karakter.` +
     topicLine +
     styleLine +
     agendaBlock(context) +
     (learnings || "") +
     avoidBlock(recent);
 
-  let out = clip(clean(await chat(tweetSystem(), user)));
-  if (config.refineTweets && out) out = await refine(out, recent);
+  let out = clip(clean(await chat(tweetSystem(), user)), limits.maxLen);
+  if (config.refineTweets && out) out = await refine(out, recent, limits);
   return out;
 }
 
@@ -142,7 +142,7 @@ async function generateTweet(recent = [], topic = null, context = [], learnings 
 // news context so the model understands *why* something is trending.
 // `trends` is [{ title, context: string[] }] (plain strings also accepted).
 // Returns null when nothing is suitable (so callers fall back to a normal tweet).
-async function generateTrendTweet(trends, recent = [], learnings = "") {
+async function generateTrendTweet(trends, recent = [], learnings = "", limits = { maxLen: 280 }) {
   const items = (trends || [])
     .map((t) => (typeof t === "string" ? { title: t, context: [] } : t))
     .filter((t) => t && t.title);
@@ -165,57 +165,57 @@ async function generateTrendTweet(trends, recent = [], learnings = "") {
     .join("\n");
 
   const user =
-    "Şu an Türkiye'de X (Twitter) gündemindeki trendler ve (varsa) ilgili güncel " +
+    "Şu an Türkiye'de gündemindeki trendler ve (varsa) ilgili güncel " +
     "haber başlıkları aşağıda. Haberler, trendin NEDEN gündemde olduğunu anlaman için.\n\n" +
     trendBlock +
     "\n\nADIM ADIM DÜŞÜN:\n" +
     "1) Hangi trendi gerçekten ANLADIĞINI ve hakkında iyi, güvenli, geniş kitleye " +
-    "hitap eden bir tweet yazabileceğini seç.\n" +
+    "hitap eden bir içerik yazabileceğini seç.\n" +
     "2) ŞUNLARI ATLA: ölüm/vefat/taziye, felaket/kaza, siyaset/seçim/politik figürler, " +
     "tartışmalı/ajite/provokatif konular, dini ya da etnik hassasiyetler, markalı " +
     "reklam/kampanya, bir kişiyi hedef alan içerik VE ne olduğunu çözemediğin belirsiz " +
     "trendler.\n" +
     '3) Uygun hiçbir trend yoksa SADECE "SKIP" yaz.\n' +
-    "4) Uygun trend varsa, o konuya GERÇEKTEN değinen tek bir tweet yaz. Trendi doğal " +
+    "4) Uygun trend varsa, o konuya GERÇEKTEN değinen tek bir içerik yaz. Trendi doğal " +
     "işle; kelimeyi/etiketi cümleye zorla sıkıştırma. Hook ile başla, vurucu ve " +
     "paylaşılası olsun.\n\n" +
-    "KURALLAR: link/URL yok; 280 karakteri geçme; en fazla 1 hashtag, o da ancak doğal " +
+    `KURALLAR: link/URL yok; ${limits.maxLen} karakteri geçme; en fazla 1 hashtag, o da ancak doğal ` +
     "duruyorsa; persona'na sadık kal." +
     styleLine +
     (learnings || "") +
     avoidBlock(recent) +
-    '\n\nSadece tweet metnini ver (ya da "SKIP"). Başka açıklama ekleme.';
+    '\n\nSadece metni ver (ya da "SKIP"). Başka açıklama ekleme.';
 
   let out = clean(await chat(tweetSystem(), user));
   if (!out || out.toUpperCase() === "SKIP") return null;
-  out = clip(out);
-  if (config.refineTweets) out = await refine(out, recent);
+  out = clip(out, limits.maxLen);
+  if (config.refineTweets) out = await refine(out, recent, limits);
   return out;
 }
 
 // Generate a 3-5 tweet thread (array of strings) on a topic. Growth-oriented,
 // human, no links, each part <=280. Returns [] when nothing usable.
-async function generateThread(topic = null, recent = [], context = [], learnings = "") {
+async function generateThread(topic = null, recent = [], context = [], learnings = "", limits = { maxLen: 280 }) {
   const topicLine = topic
     ? `\n\nKonu/ipucu: ${topic}`
     : "\n\nKonuyu sen seç: gündeme ve persona'na uygun, geniş kitleye hitap eden bir şey.";
 
   const user =
-    "Tek tweet değil, 3-5 tweet'lik bir THREAD (zincir) yaz. Büyüme ve etkileşim odaklı.\n" +
-    "- İlk tweet en güçlü HOOK olsun; tek başına merak uyandırsın, 'devamı aşağıda' gibi klişe yok.\n" +
-    "- Her tweet kendi içinde anlamlı ve akıcı; birlikte bir fikri derinleştirsin.\n" +
-    "- Son tweet vurucu bir kapanış ya da cevap çağıran bir soru olsun.\n" +
-    "- Her tweet en fazla 280 karakter, link/URL yok, en fazla 1 doğal hashtag." +
+    "Tek bir parça değil, 3-5 parçalık bir THREAD (zincir) yaz. Büyüme ve etkileşim odaklı.\n" +
+    "- İlk parça en güçlü HOOK olsun; tek başına merak uyandırsın, 'devamı aşağıda' gibi klişe yok.\n" +
+    "- Her parça kendi içinde anlamlı ve akıcı; birlikte bir fikri derinleştirsin.\n" +
+    "- Son parça vurucu bir kapanış ya da cevap çağıran bir soru olsun.\n" +
+    `- Her parça en fazla ${limits.maxLen} karakter, link/URL yok, en fazla 1 doğal hashtag.` +
     topicLine +
     agendaBlock(context) +
     (learnings || "") +
     avoidBlock(recent) +
-    "\n\nÇIKTI BİÇİMİ: yalnızca tweet metinleri; her tweet'in arasına AYRI bir satırda `---` koy. Numara, etiket veya açıklama ekleme.";
+    "\n\nÇIKTI BİÇİMİ: yalnızca metinler; her parçanın arasına AYRI bir satırda `---` koy. Numara, etiket veya açıklama ekleme.";
 
   const raw = await chat(tweetSystem(), user);
   return raw
     .split(/\n\s*-{3,}\s*\n/)
-    .map((s) => clip(clean(s)))
+    .map((s) => clip(clean(s), limits.maxLen))
     .filter(Boolean)
     .slice(0, 6);
 }
@@ -225,16 +225,16 @@ async function generateThread(topic = null, recent = [], context = [], learnings
 //   "auto"   -> clearly friendly/benign; safe to send without human review
 //   "review" -> anything sensitive/uncertain; needs human approval
 // `recent` (your last tweets) keeps the reply in your voice.
-async function triageMention(mention, recent = []) {
+async function triageMention(mention, recent = [], limits = { maxLen: 280 }) {
   const voice = recent.length
-    ? `\n\nSenin son tweet'lerin (aynı sese/ağıza sadık kal, kopyalama):\n` +
+    ? `\n\nSenin son paylaşımların (aynı sese/ağıza sadık kal, kopyalama):\n` +
       recent.slice(0, 5).map((t) => `- ${t}`).join("\n")
     : "";
 
   const user =
     `@${mention.author} sana şöyle yazdı:\n\n"${mention.text}"\n\n` +
     "1) Gerçek bir insan gibi, doğal ve kısa bir cevap yaz. Mention'ın tonuna uy " +
-    "(şakaysa şakayla, samimiyse samimi). Robot/fazla kibar olma. ≤280, link yok.\n" +
+    `(şakaysa şakayla, samimiyse samimi). Robot/fazla kibar olma. ≤${limits.maxLen} karakter, link yok.\n` +
     "2) Sonra şu kararı ver:\n" +
     "   AUTO = mention açıkça dostça/zararsız (övgü, teşekkür, basit pozitif, emoji) " +
     "ve cevabın tamamen güvenli/genel; insan onayı olmadan gönderilebilir.\n" +
@@ -254,7 +254,7 @@ async function triageMention(mention, recent = []) {
   // If the model didn't follow the format, treat the whole output as a reply
   // that needs review — never auto-send an unparsed response.
   const known = tag.startsWith("AUTO") || tag.startsWith("REVIEW");
-  const reply = clip(clean(known ? body.trim() : raw));
+  const reply = clip(clean(known ? body.trim() : raw), limits.maxLen);
   if (!reply) return { action: "skip", reply: "" };
   return { action: tag.startsWith("AUTO") ? "auto" : "review", reply };
 }

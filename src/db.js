@@ -36,6 +36,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pending_tg ON pending(tg_message_id);
 `);
 
+// Multi-platform migration: ensure 'platform' columns exist
+try { db.exec("ALTER TABLE posts ADD COLUMN platform TEXT NOT NULL DEFAULT 'x'"); } catch (e) {}
+try { db.exec("ALTER TABLE pending ADD COLUMN platform TEXT NOT NULL DEFAULT 'x'"); } catch (e) {}
+
 const localDate = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -60,11 +64,11 @@ const localDate = () => {
     );
     for (const [k, v] of Object.entries(data.meta || {})) insMeta.run(k, String(v));
     const insPost = db.prepare(
-      "INSERT INTO posts(kind, text, date, at) VALUES(?, ?, ?, ?)"
+      "INSERT INTO posts(kind, text, date, at, platform) VALUES(?, ?, ?, ?, 'x')"
     );
     for (const p of data.posts || []) insPost.run(p.kind, p.text, p.date, p.at);
     const insPend = db.prepare(
-      "INSERT OR IGNORE INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)"
+      "INSERT OR IGNORE INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at, platform) VALUES(?, ?, ?, ?, ?, ?, ?, 'x')"
     );
     for (const p of data.pending || [])
       insPend.run(
@@ -100,12 +104,20 @@ const countToday = (kind) =>
     .prepare("SELECT COUNT(*) AS n FROM posts WHERE kind = ? AND date = ?")
     .get(kind, localDate()).n;
 
-const logPost = (kind, text) => {
-  db.prepare("INSERT INTO posts(kind, text, date, at) VALUES(?, ?, ?, ?)").run(
+const countTodayByPlatform = (kind) => {
+  const rows = db
+    .prepare("SELECT platform, COUNT(*) AS n FROM posts WHERE kind = ? AND date = ? GROUP BY platform")
+    .all(kind, localDate());
+  return rows.reduce((acc, r) => ({ ...acc, [r.platform]: r.n }), {});
+};
+
+const logPost = (kind, text, platformId = "x") => {
+  db.prepare("INSERT INTO posts(kind, text, date, at, platform) VALUES(?, ?, ?, ?, ?)").run(
     kind,
     text,
     localDate(),
-    new Date().toISOString()
+    new Date().toISOString(),
+    platformId
   );
 };
 
@@ -117,30 +129,31 @@ const recentTweets = (limit = 15) =>
 
 const recentPosts = (limit = 20) =>
   db
-    .prepare("SELECT kind, text, at FROM posts ORDER BY id DESC LIMIT ?")
+    .prepare("SELECT kind, text, at, platform FROM posts ORDER BY id DESC LIMIT ?")
     .all(limit);
 
 const listPending = (status = "pending") =>
   db
     .prepare(
-      "SELECT id, mention_id, mention_text, author, draft, status, created_at FROM pending WHERE status = ? ORDER BY id DESC"
+      "SELECT id, mention_id, mention_text, author, draft, status, created_at, platform FROM pending WHERE status = ? ORDER BY id DESC"
     )
     .all(status);
 
 const mentionSeen = (mentionId) =>
   !!db.prepare("SELECT 1 FROM pending WHERE mention_id = ?").get(mentionId);
 
-const addPending = (m) => {
+const addPending = (m, platformId = "x") => {
   if (mentionSeen(m.mention_id)) return;
   db.prepare(
-    "INSERT INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at) VALUES(?, ?, ?, ?, ?, 'pending', ?)"
+    "INSERT INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at, platform) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?)"
   ).run(
     m.mention_id,
     m.mention_text,
     m.author,
     m.draft,
     m.tg_message_id ?? null,
-    new Date().toISOString()
+    new Date().toISOString(),
+    platformId
   );
 };
 
@@ -168,6 +181,7 @@ module.exports = {
   getMeta,
   setMeta,
   countToday,
+  countTodayByPlatform,
   logPost,
   recentTweets,
   recentPosts,

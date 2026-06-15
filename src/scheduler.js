@@ -1,6 +1,6 @@
 const cron = require("node-cron");
-const config = require("../config");
-const x = require("./x");
+const config = require("./settings");
+const router = require("./platforms/index");
 const ai = require("./ai");
 const db = require("./db");
 const { getEnrichedTrends } = require("./trends");
@@ -42,7 +42,7 @@ async function runTweetJob() {
     let viaTrend = false;
     if (trends.length) {
       try {
-        const t = await ai.generateTrendTweet(trends, recent, learnings);
+        const t = await ai.generateTrendTweet(trends, recent, learnings, router.getMinLimits());
         if (t) {
           tweet = t;
           viaTrend = true;
@@ -51,11 +51,18 @@ async function runTweetJob() {
         /* trend writing failed; fall back to a normal tweet below */
       }
     }
-    if (!tweet) tweet = await ai.generateTweet(recent, null, trends, learnings);
+    if (!tweet) tweet = await ai.generateTweet(recent, null, trends, learnings, router.getMinLimits());
 
-    await x.postTweet(tweet);
-    db.logPost("tweet", tweet);
-    notify(`${viaTrend ? "🔥 Trend tweet" : "📤 Tweet"} atıldı:\n"${tweet}"`);
+    for (const p of router.getActive()) {
+      try {
+        await p.post(tweet);
+        db.logPost("tweet", tweet, p.id);
+      } catch (e) {
+        notify(`⚠️ [${p.name}] Gönderim hatası: ${e.message}`);
+      }
+    }
+    
+    notify(`${viaTrend ? "🔥 Trend içerik" : "📤 İçerik"} atıldı:\n"${tweet}"`);
   } catch (e) {
     notify("⚠️ Tweet atılamadı: " + e.message);
   }
@@ -64,41 +71,46 @@ async function runTweetJob() {
 // --- Check mentions, draft replies, push suggestions to Telegram --------
 async function runMentionJob() {
   try {
-    const sinceId = db.getMeta("last_mention_id");
-    const mentions = await x.getNewMentions(sinceId);
-    if (!mentions.length) return;
+    for (const p of router.getActive()) {
+      if (!p.limits.hasMentions) continue;
 
-    for (const m of mentions) {
-      db.setMeta("last_mention_id", m.id); // advance even if we skip
-      if (db.mentionSeen(m.id)) continue;
+      const metaKey = p.id === "x" ? "last_mention_id" : `last_mention_id_${p.id}`;
+      const sinceId = db.getMeta(metaKey);
+      const mentions = await p.getMentions(sinceId);
+      if (!mentions.length) continue;
 
-      const triage = await ai.triageMention(m, db.recentTweets());
-      if (triage.action === "skip") continue;
+      for (const m of mentions) {
+        db.setMeta(metaKey, m.id); // advance even if we skip
+        if (db.mentionSeen(m.id)) continue;
 
-      // Auto-reply only to clearly safe mentions (no links), within the cap.
-      const hasLink = /https?:\/\//i.test(m.text || "");
-      if (
-        config.autoReplySafeMentions &&
-        triage.action === "auto" &&
-        !hasLink &&
-        db.countToday("reply") < config.maxRepliesPerDay
-      ) {
-        await x.replyTo(m.id, triage.reply);
-        db.logPost("reply", triage.reply);
-        notify(`🤖 Otomatik cevap (@${m.author}):\n"${triage.reply}"`);
-        continue;
+        const triage = await ai.triageMention(m, db.recentTweets(), p.limits);
+        if (triage.action === "skip") continue;
+
+        // Auto-reply only to clearly safe mentions (no links), within the cap.
+        const hasLink = /https?:\/\//i.test(m.text || "");
+        if (
+          config.autoReplySafeMentions &&
+          triage.action === "auto" &&
+          !hasLink &&
+          db.countToday("reply") < config.maxRepliesPerDay
+        ) {
+          await p.replyTo(m.id, triage.reply);
+          db.logPost("reply", triage.reply, p.id);
+          notify(`🤖 Otomatik cevap [${p.name}] (@${m.author}):\n"${triage.reply}"`);
+          continue;
+        }
+
+        // Otherwise: human approval via Telegram.
+        db.addPending({
+          mention_id: m.id,
+          mention_text: m.text,
+          author: m.author,
+          draft: triage.reply,
+          tg_message_id: null,
+        }, p.id);
+        const pending = db.getPendingByMentionId(m.id);
+        await sendSuggestion(pending);
       }
-
-      // Otherwise: human approval via Telegram.
-      db.addPending({
-        mention_id: m.id,
-        mention_text: m.text,
-        author: m.author,
-        draft: triage.reply,
-        tg_message_id: null,
-      });
-      const pending = db.getPendingByMentionId(m.id);
-      await sendSuggestion(pending);
     }
   } catch (e) {
     notify("⚠️ Mention kontrolü hata: " + e.message);

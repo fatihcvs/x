@@ -3,6 +3,11 @@
 // =====================================================================
 
 module.exports = {
+  // --- Active Platforms ------------------------------------------------
+  // Hangi platformlara eşzamanlı gönderim yapılacağını belirler.
+  // Mevcut seçenekler: "x", "threads"
+  activePlatforms: ["x", "threads"],
+
   // --- Which Claude model writes your content (Anthropic API) ---------
   // Modeli değiştirmek için sadece adını değiştir (kod düzenlemeye gerek yok).
   //   claude-sonnet-4-6 -> çok iyi kalite + Opus'tan kat kat ucuz (VARSAYILAN, dengeli)
