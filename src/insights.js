@@ -1,13 +1,8 @@
-// "What's working" signal derived from your own tweet metrics, fed back into
-// generation so the bot learns what performs. Best-effort: if the X API tier
-// doesn't allow reading tweet metrics, this quietly returns "" and the bot
-// generates without it. Cached to avoid hammering the API.
-const x = require("./x");
+const { createRouter } = require("./platforms/index");
 
 const TTL_MS = 3 * 60 * 60 * 1000; // 3h
-let cache = { at: 0, value: "" };
+const caches = new Map(); // userId -> { at, value }
 
-// Rank recent tweets by a simple engagement score and describe the top few.
 function buildBlock(tweets) {
   const scored = (tweets || [])
     .filter((t) => t.text && t.metrics)
@@ -31,16 +26,22 @@ function buildBlock(tweets) {
   );
 }
 
-// Returns a prompt block string (or "") describing your top performers.
-async function getLearnings() {
-  if (cache.at && Date.now() - cache.at < TTL_MS) return cache.value;
+async function getLearnings(userId) {
+  const c = caches.get(userId);
+  if (c && Date.now() - c.at < TTL_MS) return c.value;
+  
   let value = "";
   try {
-    value = buildBlock(await x.getMyRecentTweets(20));
+    const router = createRouter(userId);
+    const x = router.all["x"];
+    if (x) {
+      const posts = await x.getMyRecentPosts(20);
+      value = buildBlock(posts);
+    }
   } catch {
-    value = ""; // no read access / error -> generate without learnings
+    value = ""; 
   }
-  cache = { at: Date.now(), value };
+  caches.set(userId, { at: Date.now(), value });
   return value;
 }
 

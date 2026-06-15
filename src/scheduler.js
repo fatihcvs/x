@@ -1,148 +1,158 @@
 const cron = require("node-cron");
-const config = require("./settings");
-const router = require("./platforms/index");
+const { getSettings } = require("./settings");
+const { createRouter } = require("./platforms/index");
 const ai = require("./ai");
 const db = require("./db");
 const { getEnrichedTrends } = require("./trends");
 const { getLearnings } = require("./insights");
 const { notify, sendSuggestion } = require("./telegram");
 
-// --- Post one original tweet (respecting the daily cap) ----------------
-async function runTweetJob() {
+async function runTweetJob(userId) {
+  const config = getSettings(userId);
+  const router = createRouter(userId);
   try {
-    if (db.getMeta("paused") === "1") return; // /pause: skip auto-posting silently
-    if (db.countToday("tweet") >= config.maxTweetsPerDay) {
-      return notify("⏸️ Günlük tweet limiti dolu, atlandı.");
+    if (db.getMeta(userId, "paused") === "1") return;
+    if (db.countToday(userId, "tweet") >= config.maxTweetsPerDay) {
+      return notify(userId, "⏸️ Günlük tweet limiti dolu, atlandı.");
     }
-    const recent = db.recentTweets();
+    const recent = db.recentTweets(userId);
 
-    // Read the room first: current Türkiye trends + news context. Used to ride
-    // a safe trend when there's a good one, and as background awareness so even
-    // normal tweets feel timely (not forced onto a trend).
     let trends = [];
     if (config.trendsEnabled) {
-      try {
-        trends = await getEnrichedTrends();
-      } catch {
-        /* best-effort; trends stay empty */
-      }
+      try { trends = await getEnrichedTrends(); } catch {}
     }
 
-    // Learn from what performed well (best-effort; needs API read access).
     let learnings = "";
     if (config.learnFromMetrics) {
-      try {
-        learnings = await getLearnings();
-      } catch {
-        /* best-effort */
-      }
+      try { learnings = await getLearnings(userId); } catch {}
     }
 
     let tweet = null;
     let viaTrend = false;
     if (trends.length) {
       try {
-        const t = await ai.generateTrendTweet(trends, recent, learnings, router.getMinLimits());
+        const t = await ai.generateTrendTweet(userId, trends, recent, learnings, router.getMinLimits());
         if (t) {
           tweet = t;
           viaTrend = true;
         }
-      } catch {
-        /* trend writing failed; fall back to a normal tweet below */
-      }
+      } catch {}
     }
-    if (!tweet) tweet = await ai.generateTweet(recent, null, trends, learnings, router.getMinLimits());
+    if (!tweet) tweet = await ai.generateTweet(userId, recent, null, trends, learnings, router.getMinLimits());
 
     for (const p of router.getActive()) {
       try {
         await p.post(tweet);
-        db.logPost("tweet", tweet, p.id);
+        db.logPost(userId, "tweet", tweet, p.id);
       } catch (e) {
-        notify(`⚠️ [${p.name}] Gönderim hatası: ${e.message}`);
+        notify(userId, `⚠️ [${p.name}] Gönderim hatası: ${e.message}`);
       }
     }
     
-    notify(`${viaTrend ? "🔥 Trend içerik" : "📤 İçerik"} atıldı:\n"${tweet}"`);
+    notify(userId, `${viaTrend ? "🔥 Trend içerik" : "📤 İçerik"} atıldı:\n"${tweet}"`);
   } catch (e) {
-    notify("⚠️ Tweet atılamadı: " + e.message);
+    notify(userId, "⚠️ Tweet atılamadı: " + e.message);
   }
 }
 
-// --- Check mentions, draft replies, push suggestions to Telegram --------
-async function runMentionJob() {
+async function runMentionJob(userId) {
+  const config = getSettings(userId);
+  const router = createRouter(userId);
   try {
     for (const p of router.getActive()) {
       if (!p.limits.hasMentions) continue;
 
       const metaKey = p.id === "x" ? "last_mention_id" : `last_mention_id_${p.id}`;
-      const sinceId = db.getMeta(metaKey);
+      const sinceId = db.getMeta(userId, metaKey);
       const mentions = await p.getMentions(sinceId);
       if (!mentions.length) continue;
 
       for (const m of mentions) {
-        db.setMeta(metaKey, m.id); // advance even if we skip
-        if (db.mentionSeen(m.id)) continue;
+        db.setMeta(userId, metaKey, m.id);
+        if (db.mentionSeen(userId, m.id)) continue;
 
-        const triage = await ai.triageMention(m, db.recentTweets(), p.limits);
+        const triage = await ai.triageMention(userId, m, db.recentTweets(userId), p.limits);
         if (triage.action === "skip") continue;
 
-        // Auto-reply only to clearly safe mentions (no links), within the cap.
         const hasLink = /https?:\/\//i.test(m.text || "");
         if (
           config.autoReplySafeMentions &&
           triage.action === "auto" &&
           !hasLink &&
-          db.countToday("reply") < config.maxRepliesPerDay
+          db.countToday(userId, "reply") < config.maxRepliesPerDay
         ) {
           await p.replyTo(m.id, triage.reply);
-          db.logPost("reply", triage.reply, p.id);
-          notify(`🤖 Otomatik cevap [${p.name}] (@${m.author}):\n"${triage.reply}"`);
+          db.logPost(userId, "reply", triage.reply, p.id);
+          notify(userId, `🤖 Otomatik cevap [${p.name}] (@${m.author}):\n"${triage.reply}"`);
           continue;
         }
 
-        // Otherwise: human approval via Telegram.
-        db.addPending({
+        db.addPending(userId, {
           mention_id: m.id,
           mention_text: m.text,
           author: m.author,
           draft: triage.reply,
           tg_message_id: null,
         }, p.id);
-        const pending = db.getPendingByMentionId(m.id);
-        await sendSuggestion(pending);
+        const pending = db.getPendingByMentionId(userId, m.id);
+        await sendSuggestion(userId, pending);
       }
     }
   } catch (e) {
-    notify("⚠️ Mention kontrolü hata: " + e.message);
+    notify(userId, "⚠️ Mention kontrolü hata: " + e.message);
   }
 }
 
-// --- Daily digest: report today's activity to Telegram ------------------
-async function runDigest() {
+async function runDigest(userId) {
+  const config = getSettings(userId);
   try {
-    const tweets = db.countToday("tweet");
-    const replies = db.countToday("reply");
-    const paused = db.getMeta("paused") === "1";
+    const tweets = db.countToday(userId, "tweet");
+    const replies = db.countToday(userId, "reply");
+    const paused = db.getMeta(userId, "paused") === "1";
     notify(
+      userId,
       "🌙 Günlük özet\n" +
         `• Tweet: ${tweets}/${config.maxTweetsPerDay}\n` +
         `• Cevap: ${replies}/${config.maxRepliesPerDay}\n` +
         `• Durum: ${paused ? "⏸️ duraklatılmış" : "▶️ aktif"}`
     );
   } catch (e) {
-    notify("⚠️ Özet hatası: " + e.message);
+    notify(userId, "⚠️ Özet hatası: " + e.message);
+  }
+}
+
+const userTasks = {};
+
+function startUser(userId) {
+  stopUser(userId);
+  const config = getSettings(userId);
+  const opts = config.timezone ? { timezone: config.timezone } : {};
+  const tasks = { tweets: [] };
+  
+  config.tweetSchedule.forEach((expr) => {
+    tasks.tweets.push(cron.schedule(expr, () => runTweetJob(userId), opts));
+  });
+  tasks.mentions = cron.schedule(config.mentionPollCron, () => runMentionJob(userId), opts);
+  if (config.digestCron) {
+    tasks.digest = cron.schedule(config.digestCron, () => runDigest(userId), opts);
+  }
+  userTasks[userId] = tasks;
+}
+
+function stopUser(userId) {
+  const tasks = userTasks[userId];
+  if (tasks) {
+    tasks.tweets.forEach(t => t.stop());
+    if (tasks.mentions) tasks.mentions.stop();
+    if (tasks.digest) tasks.digest.stop();
+    delete userTasks[userId];
   }
 }
 
 function start() {
-  const opts = config.timezone ? { timezone: config.timezone } : {};
-  config.tweetSchedule.forEach((expr) => cron.schedule(expr, runTweetJob, opts));
-  cron.schedule(config.mentionPollCron, runMentionJob, opts);
-  if (config.digestCron) cron.schedule(config.digestCron, runDigest, opts);
-  console.log(
-    `[scheduler] ${config.tweetSchedule.length} tweet slot(s) ` +
-      `(${config.timezone || "server time"}), mentions every: ${config.mentionPollCron}`
-  );
+  const users = db.getAllUsers();
+  users.forEach(u => startUser(u.id));
+  console.log(`[scheduler] Started for ${users.length} users.`);
 }
 
-module.exports = { start, runTweetJob, runMentionJob, runDigest };
+module.exports = { start, startUser, stopUser, runTweetJob, runMentionJob, runDigest };

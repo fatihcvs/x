@@ -32,6 +32,27 @@ db.exec(`
     status        TEXT NOT NULL DEFAULT 'pending',
     created_at    TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS user_platforms (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL,
+    platform_id   TEXT NOT NULL,
+    access_token  TEXT,
+    refresh_token TEXT,
+    username      TEXT,
+    UNIQUE(user_id, platform_id)
+  );
+  CREATE TABLE IF NOT EXISTS user_meta (
+    user_id INTEGER NOT NULL,
+    key     TEXT NOT NULL,
+    value   TEXT,
+    PRIMARY KEY(user_id, key)
+  );
   CREATE INDEX IF NOT EXISTS idx_posts_kind_date ON posts(kind, date);
   CREATE INDEX IF NOT EXISTS idx_pending_tg ON pending(tg_message_id);
 `);
@@ -39,6 +60,28 @@ db.exec(`
 // Multi-platform migration: ensure 'platform' columns exist
 try { db.exec("ALTER TABLE posts ADD COLUMN platform TEXT NOT NULL DEFAULT 'x'"); } catch (e) {}
 try { db.exec("ALTER TABLE pending ADD COLUMN platform TEXT NOT NULL DEFAULT 'x'"); } catch (e) {}
+
+// Multi-user migration: ensure 'user_id' columns exist
+try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1"); } catch (e) {}
+try { db.exec("ALTER TABLE pending ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1"); } catch (e) {}
+
+// Seed the first user if empty and migrate meta
+const userCount = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+if (userCount === 0) {
+  const hash = require("crypto").createHash("sha256").update(process.env.DASHBOARD_PASSWORD || "admin").digest("hex");
+  db.prepare("INSERT INTO users (id, email, password_hash, created_at) VALUES (1, ?, ?, ?)").run(
+    process.env.DASHBOARD_EMAIL || "admin", 
+    hash, 
+    new Date().toISOString()
+  );
+  // Migrate legacy meta to user_meta for user 1
+  try {
+    const metaRows = db.prepare("SELECT * FROM meta").all();
+    for (const r of metaRows) {
+      db.prepare("INSERT OR REPLACE INTO user_meta (user_id, key, value) VALUES (1, ?, ?)").run(r.key, r.value);
+    }
+  } catch(e) {}
+}
 
 const localDate = () => {
   const d = new Date();
@@ -88,31 +131,32 @@ const localDate = () => {
 })();
 
 // --- API (same signatures as the old JSON store) ------------------------
-const getMeta = (key) => {
-  const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key);
+const getMeta = (userId, key) => {
+  const row = db.prepare("SELECT value FROM user_meta WHERE user_id = ? AND key = ?").get(userId, key);
   return row ? row.value : null;
 };
 
-const setMeta = (key, value) => {
+const setMeta = (userId, key, value) => {
   db.prepare(
-    "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).run(key, String(value));
+    "INSERT INTO user_meta(user_id, key, value) VALUES(?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value"
+  ).run(userId, key, String(value));
 };
 
-const countToday = (kind) =>
+const countToday = (userId, kind) =>
   db
-    .prepare("SELECT COUNT(*) AS n FROM posts WHERE kind = ? AND date = ?")
-    .get(kind, localDate()).n;
+    .prepare("SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND kind = ? AND date = ?")
+    .get(userId, kind, localDate()).n;
 
-const countTodayByPlatform = (kind) => {
+const countTodayByPlatform = (userId, kind) => {
   const rows = db
-    .prepare("SELECT platform, COUNT(*) AS n FROM posts WHERE kind = ? AND date = ? GROUP BY platform")
-    .all(kind, localDate());
+    .prepare("SELECT platform, COUNT(*) AS n FROM posts WHERE user_id = ? AND kind = ? AND date = ? GROUP BY platform")
+    .all(userId, kind, localDate());
   return rows.reduce((acc, r) => ({ ...acc, [r.platform]: r.n }), {});
 };
 
-const logPost = (kind, text, platformId = "x") => {
-  db.prepare("INSERT INTO posts(kind, text, date, at, platform) VALUES(?, ?, ?, ?, ?)").run(
+const logPost = (userId, kind, text, platformId = "x") => {
+  db.prepare("INSERT INTO posts(user_id, kind, text, date, at, platform) VALUES(?, ?, ?, ?, ?, ?)").run(
+    userId,
     kind,
     text,
     localDate(),
@@ -121,32 +165,33 @@ const logPost = (kind, text, platformId = "x") => {
   );
 };
 
-const recentTweets = (limit = 15) =>
+const recentTweets = (userId, limit = 15) =>
   db
-    .prepare("SELECT text FROM posts WHERE kind = 'tweet' ORDER BY id DESC LIMIT ?")
-    .all(limit)
+    .prepare("SELECT text FROM posts WHERE user_id = ? AND kind = 'tweet' ORDER BY id DESC LIMIT ?")
+    .all(userId, limit)
     .map((r) => r.text);
 
-const recentPosts = (limit = 20) =>
+const recentPosts = (userId, limit = 20) =>
   db
-    .prepare("SELECT kind, text, at, platform FROM posts ORDER BY id DESC LIMIT ?")
-    .all(limit);
+    .prepare("SELECT kind, text, at, platform FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT ?")
+    .all(userId, limit);
 
-const listPending = (status = "pending") =>
+const listPending = (userId, status = "pending") =>
   db
     .prepare(
-      "SELECT id, mention_id, mention_text, author, draft, status, created_at, platform FROM pending WHERE status = ? ORDER BY id DESC"
+      "SELECT id, mention_id, mention_text, author, draft, status, created_at, platform FROM pending WHERE user_id = ? AND status = ? ORDER BY id DESC"
     )
-    .all(status);
+    .all(userId, status);
 
-const mentionSeen = (mentionId) =>
-  !!db.prepare("SELECT 1 FROM pending WHERE mention_id = ?").get(mentionId);
+const mentionSeen = (userId, mentionId) =>
+  !!db.prepare("SELECT 1 FROM pending WHERE user_id = ? AND mention_id = ?").get(userId, mentionId);
 
-const addPending = (m, platformId = "x") => {
-  if (mentionSeen(m.mention_id)) return;
+const addPending = (userId, m, platformId = "x") => {
+  if (mentionSeen(userId, m.mention_id)) return;
   db.prepare(
-    "INSERT INTO pending(mention_id, mention_text, author, draft, tg_message_id, status, created_at, platform) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?)"
+    "INSERT INTO pending(user_id, mention_id, mention_text, author, draft, tg_message_id, status, created_at, platform) VALUES(?, ?, ?, ?, ?, ?, 'pending', ?, ?)"
   ).run(
+    userId,
     m.mention_id,
     m.mention_text,
     m.author,
@@ -157,9 +202,10 @@ const addPending = (m, platformId = "x") => {
   );
 };
 
-const setTgMessageId = (mentionId, tgMessageId) => {
-  db.prepare("UPDATE pending SET tg_message_id = ? WHERE mention_id = ?").run(
+const setTgMessageId = (userId, mentionId, tgMessageId) => {
+  db.prepare("UPDATE pending SET tg_message_id = ? WHERE user_id = ? AND mention_id = ?").run(
     tgMessageId,
+    userId,
     mentionId
   );
 };
@@ -167,14 +213,35 @@ const setTgMessageId = (mentionId, tgMessageId) => {
 const getPendingByTgMessage = (tgMessageId) =>
   db.prepare("SELECT * FROM pending WHERE tg_message_id = ?").get(tgMessageId);
 
-const getPendingById = (id) =>
-  db.prepare("SELECT * FROM pending WHERE id = ?").get(id);
+const getPendingById = (userId, id) =>
+  db.prepare("SELECT * FROM pending WHERE user_id = ? AND id = ?").get(userId, id);
 
-const getPendingByMentionId = (mentionId) =>
-  db.prepare("SELECT * FROM pending WHERE mention_id = ?").get(mentionId);
+const getPendingByMentionId = (userId, mentionId) =>
+  db.prepare("SELECT * FROM pending WHERE user_id = ? AND mention_id = ?").get(userId, mentionId);
 
-const setPendingStatus = (id, status) => {
-  db.prepare("UPDATE pending SET status = ? WHERE id = ?").run(status, id);
+const setPendingStatus = (userId, id, status) => {
+  db.prepare("UPDATE pending SET status = ? WHERE user_id = ? AND id = ?").run(status, userId, id);
+};
+
+// --- User Management API ----------------------------------------------
+const getUser = (email) => db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+const getUserById = (id) => db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+const getUserByTgChat = (chatId) => {
+  const row = db.prepare("SELECT user_id FROM user_meta WHERE key = 'telegramChatId' AND value = ?").get(String(chatId));
+  // Fallback for user 1 if not set in DB but exists in env
+  if (!row && String(chatId) === String(process.env.TELEGRAM_CHAT_ID)) return 1;
+  return row ? row.user_id : null;
+};
+const createUser = (email, passwordHash) => {
+  const res = db.prepare("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)").run(email, passwordHash, new Date().toISOString());
+  return res.lastInsertRowid;
+};
+const getAllUsers = () => db.prepare("SELECT id FROM users").all();
+const getUserPlatforms = (userId) => db.prepare("SELECT * FROM user_platforms WHERE user_id = ?").all(userId);
+const setUserPlatform = (userId, platformId, accessToken, refreshToken, username) => {
+  db.prepare(
+    "INSERT INTO user_platforms (user_id, platform_id, access_token, refresh_token, username) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, platform_id) DO UPDATE SET access_token=excluded.access_token, refresh_token=excluded.refresh_token, username=excluded.username"
+  ).run(userId, platformId, accessToken, refreshToken, username);
 };
 
 module.exports = {
@@ -193,4 +260,11 @@ module.exports = {
   getPendingById,
   getPendingByMentionId,
   setPendingStatus,
+  getUser,
+  getUserById,
+  getUserByTgChat,
+  createUser,
+  getAllUsers,
+  getUserPlatforms,
+  setUserPlatform,
 };

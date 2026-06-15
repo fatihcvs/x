@@ -1,13 +1,8 @@
 require("dotenv").config();
 
 const REQUIRED = [
-  "X_API_KEY",
-  "X_API_SECRET",
-  "X_ACCESS_TOKEN",
-  "X_ACCESS_SECRET",
   "ANTHROPIC_API_KEY",
   "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_CHAT_ID",
 ];
 
 const missing = REQUIRED.filter((k) => !process.env[k]);
@@ -17,23 +12,13 @@ if (missing.length) {
   process.exit(1);
 }
 
-const x = require("./src/x");
 const scheduler = require("./src/scheduler");
-const { notify } = require("./src/telegram");
 const web = require("./src/web");
 
 (async () => {
   try {
-    const userId = await x.getUserId(); // verifies X credentials early
-    console.log("[startup] X auth OK, user id:", userId);
     scheduler.start();
     web.start();
-    notify(
-      "🤖 Co-pilot çalışıyor.\n" +
-        "• Tweet'ler otomatik (uygun trend varsa ona göre)\n" +
-        "• Mention'lar onayına gelir\n" +
-        "• Komutlar: /tweet, /tweet <konu>, /trend, /help"
-    );
     console.log("[startup] running.");
   } catch (e) {
     console.error("[startup] failed:", e.message);

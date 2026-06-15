@@ -1,31 +1,53 @@
-const config = require("../settings");
-const x = require("./x");
-const threads = require("./threads");
+const { getSettings } = require("../settings");
+const db = require("../db");
+const createX = require("./x");
+const createThreads = require("./threads");
 
-const all = { x, threads };
+const PLATFORM_FACTORIES = { x: createX, threads: createThreads };
 
-// Returns the array of platform adapter objects that are currently active
-function getActive() {
+function createRouter(userId) {
+  const config = getSettings(userId);
   const activeIds = config.activePlatforms || ["x"];
-  return activeIds.map((id) => all[id]).filter(Boolean);
-}
+  
+  const platformsDb = db.getUserPlatforms(userId);
+  const platformsMap = Object.fromEntries(platformsDb.map(p => [p.platform_id, p]));
+  
+  const active = [];
+  const allMap = {};
+  
+  for (const id of Object.keys(PLATFORM_FACTORIES)) {
+    const tokens = platformsMap[id];
+    // Global fallback for user 1 to avoid breaking single-tenant setups immediately
+    const fallbackTokens = userId === 1 && id === "x" ? {
+      access_token: process.env.X_ACCESS_TOKEN,
+      refresh_token: process.env.X_ACCESS_SECRET
+    } : (userId === 1 && id === "threads" ? {
+      username: process.env.THREADS_USER_ID,
+      access_token: process.env.THREADS_ACCESS_TOKEN
+    } : null);
 
-// Calculates the most restrictive limits across all active platforms
-// so that a single generated content can be safely posted to all.
-function getMinLimits() {
-  const active = getActive();
-  if (!active.length) {
-    return { maxLen: 280, hasThreads: false, hasMentions: false };
+    const activeTokens = tokens || fallbackTokens;
+    if (activeTokens && activeTokens.access_token) {
+       allMap[id] = PLATFORM_FACTORIES[id](activeTokens);
+    }
   }
+  
+  for (const id of activeIds) {
+    if (allMap[id]) active.push(allMap[id]);
+  }
+  
   return {
-    maxLen: Math.min(...active.map((p) => p.limits.maxLen)),
-    hasThreads: active.every((p) => p.limits.hasThreads),
-    hasMentions: active.some((p) => p.limits.hasMentions),
+    all: allMap,
+    getActive: () => active,
+    getMinLimits: () => {
+      if (!active.length) return { maxLen: 280, hasThreads: false, hasMentions: false };
+      return {
+        maxLen: Math.min(...active.map((p) => p.limits.maxLen)),
+        hasThreads: active.every((p) => p.limits.hasThreads),
+        hasMentions: active.some((p) => p.limits.hasMentions),
+      };
+    }
   };
 }
 
-module.exports = {
-  all,
-  getActive,
-  getMinLimits,
-};
+module.exports = { createRouter };

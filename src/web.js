@@ -1,36 +1,32 @@
-// Web control panel (Faz 1): stats, recent activity, pending mentions,
-// pause/resume, a composer (generate/post tweet·trend·thread) and mention
-// approval — all behind a single-password login. Runs inside the bot process,
-// enabled only when DASHBOARD_PASSWORD is set.
-//
-// SECURITY: the panel can post and reply on your behalf, so always run it behind
-// HTTPS in production (Railway gives HTTPS; on a bare VPS use a TLS reverse proxy).
 const crypto = require("crypto");
 const express = require("express");
-const config = require("./settings");
+const { getSettings } = require("./settings");
 const db = require("./db");
 const compose = require("./compose");
 
-const PASSWORD = process.env.DASHBOARD_PASSWORD || "";
-const SECRET = crypto.createHash("sha256").update(PASSWORD || "disabled").digest();
+const SECRET = process.env.SESSION_SECRET || "dev_secret_key_123";
 const COOKIE = "sid";
-const SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 gün
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
-// --- signed session token (HMAC + expiry) -------------------------------
-const sign = (exp) =>
-  `${exp}.${crypto.createHmac("sha256", SECRET).update(String(exp)).digest("hex")}`;
+const sign = (userId, exp) =>
+  `${userId}.${exp}.${crypto.createHmac("sha256", SECRET).update(`${userId}.${exp}`).digest("hex")}`;
 
 function validToken(token) {
-  if (!token) return false;
-  const [expStr, mac] = token.split(".");
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const userId = Number(parts[0]);
+  const expStr = parts[1];
+  const mac = parts[2];
   const exp = Number(expStr);
-  if (!exp || Date.now() > exp || !mac) return false;
-  const expected = crypto.createHmac("sha256", SECRET).update(expStr).digest("hex");
+  if (!userId || !exp || Date.now() > exp || !mac) return null;
+  const expected = crypto.createHmac("sha256", SECRET).update(`${userId}.${expStr}`).digest("hex");
   try {
-    return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
-  } catch {
-    return false;
-  }
+    if (crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) {
+      return userId;
+    }
+  } catch {}
+  return null;
 }
 
 function cookieToken(req) {
@@ -42,12 +38,6 @@ function cookieToken(req) {
   return null;
 }
 
-function passwordOk(input) {
-  const a = Buffer.from(input || "");
-  const b = Buffer.from(PASSWORD);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 const MODES = new Set(["manual", "trend", "thread"]);
 
 function buildApp() {
@@ -56,17 +46,45 @@ function buildApp() {
   app.use(express.json());
 
   app.post("/api/login", (req, res) => {
-    if (!PASSWORD || !passwordOk(req.body && req.body.password)) {
-      return res.status(401).json({ ok: false, error: "Hatalı şifre" });
-    }
+    const { email, password } = req.body || {};
+    const u = db.getUser(email);
+    if (!u) return res.status(401).json({ ok: false, error: "Kullanıcı bulunamadı" });
+    const hash = crypto.createHash("sha256").update(password || "").digest("hex");
+    if (u.password_hash !== hash) return res.status(401).json({ ok: false, error: "Hatalı şifre" });
+    
     const exp = Date.now() + SESSION_MS;
     const secure = req.headers["x-forwarded-proto"] === "https";
     res.setHeader(
       "Set-Cookie",
-      `${COOKIE}=${sign(exp)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
+      `${COOKIE}=${sign(u.id, exp)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
         SESSION_MS / 1000
       )}${secure ? "; Secure" : ""}`
     );
+    res.json({ ok: true });
+  });
+
+  app.post("/api/register", (req, res) => {
+    const { email, password } = req.body || {};
+    if (!email || !password || password.length < 5) {
+      return res.status(400).json({ok: false, error: "Geçersiz e-posta veya kısa şifre"});
+    }
+    if (db.getUser(email)) return res.status(400).json({ok: false, error: "Bu e-posta zaten kullanımda"});
+    
+    const hash = crypto.createHash("sha256").update(password).digest("hex");
+    const newId = db.createUser(email, hash);
+    const exp = Date.now() + SESSION_MS;
+    const secure = req.headers["x-forwarded-proto"] === "https";
+    
+    res.setHeader(
+      "Set-Cookie",
+      `${COOKIE}=${sign(newId, exp)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
+        SESSION_MS / 1000
+      )}${secure ? "; Secure" : ""}`
+    );
+    
+    const scheduler = require("./scheduler");
+    scheduler.startUser(newId);
+    
     res.json({ ok: true });
   });
 
@@ -75,60 +93,80 @@ function buildApp() {
     res.json({ ok: true });
   });
 
-  // Auth gate for everything else under /api.
   app.use("/api", (req, res, next) => {
-    if (validToken(cookieToken(req))) return next();
+    const userId = validToken(cookieToken(req));
+    if (userId) {
+      req.userId = userId;
+      return next();
+    }
     res.status(401).json({ ok: false, error: "Giriş gerekli" });
   });
 
-  app.get("/api/stats", (_req, res) => {
+  app.get("/api/stats", (req, res) => {
+    const config = getSettings(req.userId);
     res.json({
       model: config.model,
-      paused: db.getMeta("paused") === "1",
+      paused: db.getMeta(req.userId, "paused") === "1",
       activePlatforms: config.activePlatforms || ["x"],
       tweets: { 
-        today: db.countToday("tweet"), 
+        today: db.countToday(req.userId, "tweet"), 
         max: config.maxTweetsPerDay,
-        byPlatform: db.countTodayByPlatform("tweet")
+        byPlatform: db.countTodayByPlatform(req.userId, "tweet")
       },
       replies: { 
-        today: db.countToday("reply"), 
+        today: db.countToday(req.userId, "reply"), 
         max: config.maxRepliesPerDay,
-        byPlatform: db.countTodayByPlatform("reply")
+        byPlatform: db.countTodayByPlatform(req.userId, "reply")
       },
     });
   });
 
-  app.get("/api/activity", (_req, res) => res.json({ posts: db.recentPosts(20) }));
-  app.get("/api/pending", (_req, res) => res.json({ pending: db.listPending() }));
+  app.get("/api/activity", (req, res) => res.json({ posts: db.recentPosts(req.userId, 20) }));
+  app.get("/api/pending", (req, res) => res.json({ pending: db.listPending(req.userId) }));
 
-  app.post("/api/pause", (_req, res) => {
-    db.setMeta("paused", "1");
+  app.post("/api/pause", (req, res) => {
+    db.setMeta(req.userId, "paused", "1");
     res.json({ ok: true, paused: true });
   });
-  app.post("/api/resume", (_req, res) => {
-    db.setMeta("paused", "0");
+  app.post("/api/resume", (req, res) => {
+    db.setMeta(req.userId, "paused", "0");
     res.json({ ok: true, paused: false });
   });
 
-  app.get("/api/settings", (_req, res) => res.json({ ok: true, data: config._getRaw() }));
+  app.get("/api/settings", (req, res) => {
+    const config = getSettings(req.userId);
+    const platformsDb = db.getUserPlatforms(req.userId);
+    const pm = Object.fromEntries(platformsDb.map(p => [p.platform_id, p]));
+    res.json({ ok: true, data: config._getRaw(), platforms: { x: pm.x || {}, threads: pm.threads || {} } });
+  });
+
   app.post("/api/settings", (req, res) => {
     try {
-      config._update(req.body || {});
+      const config = getSettings(req.userId);
+      config._update((req.body && req.body.config) || {});
+      const p = (req.body && req.body.platforms) || {};
+      
+      if (p.x && (p.x.access_token || p.x.refresh_token)) {
+        db.setUserPlatform(req.userId, "x", p.x.access_token || "", p.x.refresh_token || "", p.x.username || "");
+      }
+      if (p.threads && (p.threads.access_token || p.threads.username)) {
+        db.setUserPlatform(req.userId, "threads", p.threads.access_token || "", p.threads.refresh_token || "", p.threads.username || "");
+      }
+      
+      const scheduler = require("./scheduler");
+      scheduler.startUser(req.userId);
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ ok: false, error: e.message });
     }
   });
 
-  // Composer: generate a draft (no posting), then post it.
   app.post("/api/generate", async (req, res) => {
     const mode = (req.body && req.body.mode) || "";
-    const topic =
-      req.body && req.body.topic ? String(req.body.topic).trim() : null;
+    const topic = req.body && req.body.topic ? String(req.body.topic).trim() : null;
     if (!MODES.has(mode)) return res.status(400).json({ ok: false, error: "Geçersiz mod" });
     try {
-      const content = await compose.generateContent(mode, topic || null);
+      const content = await compose.generateContent(req.userId, mode, topic || null);
       if (!content) {
         return res.json({
           ok: false,
@@ -147,24 +185,23 @@ function buildApp() {
       return res.status(400).json({ ok: false, error: "İçerik yok" });
     }
     try {
-      const count = await compose.postContent(content);
+      const count = await compose.postContent(req.userId, content);
       res.json({ ok: true, count });
     } catch (e) {
       res.status(400).json({ ok: false, error: e.message });
     }
   });
 
-  // Mention approval: approve | edit | reject.
   app.post("/api/pending/:id", async (req, res) => {
     const id = Number(req.params.id);
     const action = (req.body && req.body.action) || "";
-    const pending = db.getPendingById(id);
+    const pending = db.getPendingById(req.userId, id);
     if (!pending || pending.status !== "pending") {
       return res.status(404).json({ ok: false, error: "Bulunamadı veya zaten işlenmiş" });
     }
     try {
       if (action === "reject") {
-        db.setPendingStatus(id, "skipped");
+        db.setPendingStatus(req.userId, id, "skipped");
         return res.json({ ok: true, status: "skipped" });
       }
       if (action === "approve" || action === "edit") {
@@ -173,7 +210,7 @@ function buildApp() {
             ? String((req.body && req.body.text) || "").slice(0, 280)
             : pending.draft;
         if (!text) return res.status(400).json({ ok: false, error: "Boş cevap" });
-        const r = await compose.sendReply(pending, text);
+        const r = await compose.sendReply(req.userId, pending, text);
         if (!r.ok) return res.status(400).json({ ok: false, error: r.reason });
         return res.json({ ok: true, status: "sent" });
       }
@@ -188,13 +225,9 @@ function buildApp() {
 }
 
 function start() {
-  if (!PASSWORD) {
-    console.log("[web] panel kapalı (DASHBOARD_PASSWORD tanımlı değil).");
-    return null;
-  }
   const port = Number(process.env.PORT) || 3000;
   return buildApp().listen(port, () =>
-    console.log(`[web] kontrol paneli :${port} (şifre korumalı)`)
+    console.log(`[web] kontrol paneli :${port} (Çoklu-Kullanıcı SaaS)`)
   );
 }
 
@@ -225,10 +258,15 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
 .pre{white-space:pre-wrap}
 </style></head><body><div class="wrap">
 
-<div id="login" class="card hidden">
-<h1>🤖 Co-pilot Panel</h1><p class="muted">Devam etmek için şifre gir.</p>
-<div class="row"><input id="pw" type="password" placeholder="Panel şifresi" /></div>
-<div class="err" id="loginErr"></div><div class="row"><button id="loginBtn">Giriş</button></div>
+<div id="auth" class="card hidden">
+<h1>🤖 Co-pilot SaaS</h1><p class="muted">Giriş yapın veya yeni hesap oluşturun.</p>
+<div class="row"><input id="auth_email" type="email" placeholder="E-posta" /></div>
+<div class="row" style="margin-top:10px;"><input id="auth_pw" type="password" placeholder="Şifre" /></div>
+<div class="err" id="authErr" style="margin-top:5px;"></div>
+<div class="row" style="margin-top:10px;">
+  <button id="loginBtn">Giriş Yap</button>
+  <button id="registerBtn" class="ghost">Kayıt Ol</button>
+</div>
 </div>
 
 <div id="dash" class="hidden">
@@ -260,12 +298,22 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
 
 <div id="settingsView" class="hidden">
 <div class="row"><h1>⚙️ Ayarlar</h1><span class="sp"></span><button id="closeSettingsBtn" class="ghost">← Geri</button></div>
-<p class="muted">Boş bırakılan veya değiştirilmeyen ayarlar <code>config.js</code> içindeki varsayılan değerleri kullanır.</p>
+<p class="muted">Aşağıdaki bilgileri doldurarak hesaplarınızı ve yapay zeka yapılandırmanızı yönetin.</p>
 <div class="card list">
   <div style="margin-top:8px;margin-bottom:8px;"><label class="muted">Aktif Platformlar (Eşzamanlı Gönderim)</label>
     <div><label><input id="set_platform_x" type="checkbox" /> X (Twitter)</label></div>
     <div><label><input id="set_platform_threads" type="checkbox" /> Threads</label></div>
   </div>
+  
+  <h2>Platform Bağlantıları</h2>
+  <div><label class="muted">X Access Token</label><br><input id="set_x_token" /></div>
+  <div><label class="muted">X Access Secret</label><br><input id="set_x_secret" type="password" /></div>
+  
+  <div style="margin-top:10px"><label class="muted">Threads Kullanıcı ID</label><br><input id="set_threads_user" /></div>
+  <div><label class="muted">Threads Access Token</label><br><input id="set_threads_token" type="password" /></div>
+  
+  <h2>Bot Ayarları</h2>
+  <div><label class="muted">Telegram Chat ID (Bildirimler için)</label><br><input id="set_tg_chat" /></div>
   <div><label class="muted">Model (örn: claude-sonnet-4-6)</label><br><input id="set_model" /></div>
   <div><label class="muted">Günlük Maksimum Tweet</label><br><input id="set_maxTweetsPerDay" type="number" /></div>
   <div><label class="muted">Günlük Maksimum Cevap</label><br><input id="set_maxRepliesPerDay" type="number" /></div>
@@ -274,8 +322,7 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
   
   <div style="margin-top:8px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
   <div><label><input id="set_trendsEnabled" type="checkbox" /> Trendlere Katıl (trendsEnabled)</label></div>
-  <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap (autoReplySafeMentions)</label></div>
-  <div><label><input id="set_learnFromMetrics" type="checkbox" /> Metriklerden Öğren (learnFromMetrics)</label></div>
+  <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap</label></div>
   
   <div class="row" style="margin-top:16px"><button id="saveSettingsBtn">Kaydet</button><span id="set_msg" class="muted" style="margin-left:10px;"></span></div>
 </div>
@@ -286,14 +333,14 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
 const $=s=>document.querySelector(s);
 const api=(p,o)=>fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o));
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const show=id=>{$('#login').classList.toggle('hidden',id!=='login');$('#dash').classList.toggle('hidden',id!=='dash');$('#settingsView').classList.toggle('hidden',id!=='settings');};
+const show=id=>{$('#auth').classList.toggle('hidden',id!=='auth');$('#dash').classList.toggle('hidden',id!=='dash');$('#settingsView').classList.toggle('hidden',id!=='settings');};
 let draft=null;
 function renderContent(c){return c.parts?c.parts.map((p,i)=>(i+1)+'. '+esc(p)).join('\\n\\n'):esc(c.text);}
 
 async function load(){
   if(!$('#dash').classList.contains('hidden') || !$('#settingsView').classList.contains('hidden')) {} else return;
   const r=await api('/api/stats');
-  if(r.status===401){show('login');return;}
+  if(r.status===401){show('auth');return;}
   const s=await r.json();
   if(!$('#dash').classList.contains('hidden')) {
     $('#model').textContent=s.model;
@@ -356,11 +403,18 @@ async function loadSettings() {
   $('#set_maxRepliesPerDay').value = get('maxRepliesPerDay') || '';
   $('#set_accountGoal').value = get('accountGoal') || '';
   $('#set_persona').value = get('persona') || '';
+  $('#set_tg_chat').value = get('telegramChatId') || '';
   
   $('#set_refineTweets').checked = !!get('refineTweets');
   $('#set_trendsEnabled').checked = !!get('trendsEnabled');
   $('#set_autoReplySafeMentions').checked = !!get('autoReplySafeMentions');
-  $('#set_learnFromMetrics').checked = !!get('learnFromMetrics');
+  
+  const x = j.platforms.x || {};
+  const t = j.platforms.threads || {};
+  $('#set_x_token').value = x.access_token || '';
+  $('#set_x_secret').value = x.refresh_token || '';
+  $('#set_threads_user').value = t.username || '';
+  $('#set_threads_token').value = t.access_token || '';
 }
 
 $('#settingsBtn').onclick = () => { loadSettings(); show('settings'); };
@@ -369,24 +423,24 @@ $('#closeSettingsBtn').onclick = () => { load(); show('dash'); };
 $('#saveSettingsBtn').onclick = async () => {
   $('#saveSettingsBtn').disabled = true;
   $('#set_msg').textContent = 'Kaydediliyor...';
-  const payload = {};
+  const cPayload = {};
   
   const active = [];
   if ($('#set_platform_x').checked) active.push('x');
   if ($('#set_platform_threads').checked) active.push('threads');
-  payload.activePlatforms = JSON.stringify(active) === JSON.stringify(currentSettings.defaults.activePlatforms) ? null : active;
+  cPayload.activePlatforms = JSON.stringify(active) === JSON.stringify(currentSettings.defaults.activePlatforms) ? null : active;
   
   const vStr = (id, k) => { 
     const val = $('#'+id).value; 
-    payload[k] = val === currentSettings.defaults[k] ? null : val; 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
   };
   const vNum = (id, k) => { 
     const val = Number($('#'+id).value); 
-    payload[k] = val === currentSettings.defaults[k] ? null : val; 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
   };
   const vBool = (id, k) => { 
     const val = $('#'+id).checked; 
-    payload[k] = val === currentSettings.defaults[k] ? null : val; 
+    cPayload[k] = val === currentSettings.defaults[k] ? null : val; 
   };
 
   vStr('set_model', 'model');
@@ -394,17 +448,30 @@ $('#saveSettingsBtn').onclick = async () => {
   vNum('set_maxRepliesPerDay', 'maxRepliesPerDay');
   vStr('set_accountGoal', 'accountGoal');
   vStr('set_persona', 'persona');
-  
+  vStr('set_tg_chat', 'telegramChatId');
   vBool('set_refineTweets', 'refineTweets');
   vBool('set_trendsEnabled', 'trendsEnabled');
   vBool('set_autoReplySafeMentions', 'autoReplySafeMentions');
-  vBool('set_learnFromMetrics', 'learnFromMetrics');
+  
+  const payload = {
+    config: cPayload,
+    platforms: {
+      x: {
+        access_token: $('#set_x_token').value,
+        refresh_token: $('#set_x_secret').value
+      },
+      threads: {
+        username: $('#set_threads_user').value,
+        access_token: $('#set_threads_token').value
+      }
+    }
+  };
   
   const r = await api('/api/settings', { method: 'POST', body: JSON.stringify(payload) });
   const j = await r.json();
   $('#saveSettingsBtn').disabled = false;
   if (j.ok) {
-    $('#set_msg').textContent = 'Kaydedildi! (yeniden başlatma gerektirebilir)';
+    $('#set_msg').textContent = 'Kaydedildi!';
     setTimeout(() => $('#set_msg').textContent='', 3000);
     loadSettings();
   } else {
@@ -412,14 +479,25 @@ $('#saveSettingsBtn').onclick = async () => {
   }
 };
 
-$('#loginBtn').onclick=async()=>{$('#loginErr').textContent='';const r=await api('/api/login',{method:'POST',body:JSON.stringify({password:$('#pw').value})});if(r.ok){$('#pw').value='';show('dash');load();}else{$('#loginErr').textContent='Hatalı şifre.';}};
-$('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click();});
+const handleAuth=async(endpoint)=>{
+  $('#authErr').textContent='';
+  const email=$('#auth_email').value;
+  const pw=$('#auth_pw').value;
+  if(!email || !pw) return $('#authErr').textContent='Lütfen bilgileri doldurun.';
+  const r=await api(endpoint,{method:'POST',body:JSON.stringify({email,password:pw})});
+  if(r.ok){$('#auth_pw').value='';show('dash');load();}
+  else{const j=await r.json();$('#authErr').textContent=j.error||'Bir hata oluştu.';}
+};
+$('#loginBtn').onclick=()=>handleAuth('/api/login');
+$('#registerBtn').onclick=()=>handleAuth('/api/register');
+$('#auth_pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click();});
+
 $('#pauseBtn').onclick=async()=>{await api('/api/pause',{method:'POST'});load();};
 $('#resumeBtn').onclick=async()=>{await api('/api/resume',{method:'POST'});load();};
 $('#refreshBtn').onclick=load;
-$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});show('login');};
+$('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});show('auth');};
 
-api('/api/stats').then(r=>{if(r.ok){show('dash');load();}else show('login');}).catch(()=>show('login'));
+api('/api/stats').then(r=>{if(r.ok){show('dash');load();}else show('auth');}).catch(()=>show('auth'));
 setInterval(()=>{load();},20000);
 </script></body></html>`;
 
