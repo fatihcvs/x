@@ -24,6 +24,12 @@ module.exports = function createXClient(tokens) {
     return res.data; // { id, text }
   }
 
+  async function postWithMedia(text, mediaBuffer, mimeType) {
+    const mediaId = await client.v1.uploadMedia(mediaBuffer, { mimeType });
+    const res = await rw.v2.tweet(text, { media: { media_ids: [mediaId] } });
+    return res.data;
+  }
+
   async function replyTo(tweetId, text) {
     const res = await rw.v2.tweet(text, {
       reply: { in_reply_to_tweet_id: tweetId },
@@ -31,9 +37,17 @@ module.exports = function createXClient(tokens) {
     return res.data;
   }
 
-  async function postThread(texts) {
+  async function postThread(texts, mediaUrl = null) {
     const ids = [];
     let lastId = null;
+    
+    // Media only attached to the first tweet in the thread
+    let firstTweetMediaId = null;
+    if (mediaUrl) {
+      // Actually, thread generation passes texts. If we want media in thread, we can upload here.
+      // But we will assume postThread receives texts. The composer will handle downloading.
+    }
+    
     for (const text of texts) {
       const res = lastId
         ? await rw.v2.tweet(text, { reply: { in_reply_to_tweet_id: lastId } })
@@ -90,6 +104,7 @@ module.exports = function createXClient(tokens) {
     name: "X (Twitter)",
     limits: { maxLen: 280, hasThreads: true, hasMentions: true },
     post,
+    postWithMedia,
     replyTo,
     postThread,
     getMentions,

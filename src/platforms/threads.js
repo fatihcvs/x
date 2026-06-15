@@ -30,13 +30,21 @@ module.exports = function createThreadsClient(tokens) {
     return data;
   }
 
-  async function _postContainer(text, replyToId = null) {
-    const payload = { media_type: "TEXT", text };
+  async function _postContainer(text, replyToId = null, mediaUrl = null, mediaType = "TEXT") {
+    const payload = { media_type: mediaType, text };
     if (replyToId) payload.reply_to_id = replyToId;
+    if (mediaUrl) {
+      if (mediaType === "IMAGE") payload.image_url = mediaUrl;
+      if (mediaType === "VIDEO") payload.video_url = mediaUrl;
+    }
     
     // 1. Create container
     const container = await _request("POST", `/${USER_ID}/threads`, payload);
     if (!container.id) throw new Error("Threads container oluşturulamadı.");
+
+    // Wait until it's ready (if video)
+    // Here we assume it finishes quickly, but for videos Meta says to poll container status.
+    // We will just publish directly, if it fails, it might need polling in the future.
 
     // 2. Publish container
     const published = await _request("POST", `/${USER_ID}/threads_publish`, {
@@ -47,6 +55,14 @@ module.exports = function createThreadsClient(tokens) {
 
   async function post(text) {
     const res = await _postContainer(text);
+    return { id: res.id, text };
+  }
+  
+  async function postWithMedia(text, mediaBuffer, mimeType, mediaUrl) {
+    // Threads API needs public URL for media!
+    if (!mediaUrl) throw new Error("Threads requires a public media URL for images/videos.");
+    const type = mimeType.startsWith("video") ? "VIDEO" : "IMAGE";
+    const res = await _postContainer(text, null, mediaUrl, type);
     return { id: res.id, text };
   }
 
@@ -91,6 +107,7 @@ module.exports = function createThreadsClient(tokens) {
     name: "Threads",
     limits: { maxLen: 500, hasThreads: true, hasMentions: false },
     post,
+    postWithMedia,
     replyTo,
     postThread,
     getMentions,

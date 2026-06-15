@@ -87,10 +87,14 @@ function draftBody(mode, content) {
     );
   }
   const head = mode === "trend" ? "🔥 Trend taslağı" : "📝 Tweet taslağı";
-  return `${head}:\n\n"${content.text}"`;
+  let body = `${head}:\n\n"${content.text}"`;
+  if (content.mediaUrl) {
+    body += `\n\n🖼️ [Görsel](${content.mediaUrl})`;
+  }
+  return body;
 }
 
-async function buildDraft(userId, mode, topic) {
+async function buildDraft(userId, mode, topic, withMedia = false) {
   const config = getSettings(userId);
   const router = createRouter(userId);
   const recent = db.recentTweets(userId);
@@ -100,25 +104,39 @@ async function buildDraft(userId, mode, topic) {
     try { learnings = await getLearnings(userId); } catch {}
   }
 
+  let text = null;
   if (mode === "trend") {
     const trends = await getEnrichedTrends();
     if (!trends.length) return null;
-    const t = await ai.generateTrendTweet(userId, trends, recent, learnings, router.getMinLimits());
-    return t ? { text: t } : null;
+    text = await ai.generateTrendTweet(userId, trends, recent, learnings, router.getMinLimits());
+    if (!text) return null;
+  } else {
+    let context = [];
+    if (config.trendsEnabled && (mode === "thread" || !topic)) {
+      try { context = await getEnrichedTrends(); } catch {}
+    }
+
+    if (mode === "thread") {
+      const parts = await ai.generateThread(userId, topic, recent, context, learnings, router.getMinLimits());
+      return parts && parts.length ? { parts } : null;
+    }
+
+    text = await ai.generateTweet(userId, recent, topic, context, learnings, router.getMinLimits());
+    if (!text) return null;
   }
 
-  let context = [];
-  if (config.trendsEnabled && (mode === "thread" || !topic)) {
-    try { context = await getEnrichedTrends(); } catch {}
+  const content = { text };
+  if (withMedia || config.autoGenerateMedia) {
+    const media = require("./media");
+    try {
+      const prompt = await media.generateImagePrompt(userId, text);
+      content.mediaUrl = await media.generateImage(userId, prompt);
+    } catch (e) {
+      console.error("[telegram] Görsel üretilemedi:", e.message);
+    }
   }
 
-  if (mode === "thread") {
-    const parts = await ai.generateThread(userId, topic, recent, context, learnings, router.getMinLimits());
-    return parts && parts.length ? { parts } : null;
-  }
-
-  const text = await ai.generateTweet(userId, recent, topic, context, learnings, router.getMinLimits());
-  return text ? { text } : null;
+  return content;
 }
 
 async function editMsg(chatId, messageId, text, withButtons, userId) {
@@ -131,7 +149,7 @@ async function editMsg(chatId, messageId, text, withButtons, userId) {
   }
 }
 
-async function startDraft(userId, chatId, mode, topic) {
+async function startDraft(userId, chatId, mode, topic, withMedia = false) {
   const config = getSettings(userId);
   let statusId = null;
   try {
@@ -140,7 +158,7 @@ async function startDraft(userId, chatId, mode, topic) {
         ? "🧵 Thread üretiliyor..."
         : mode === "trend"
         ? "🔎 Uygun trend aranıyor..."
-        : "✍️ Taslak üretiliyor...";
+        : withMedia ? "✍️ Görselli taslak üretiliyor..." : "✍️ Taslak üretiliyor...";
     const sent = await bot.sendMessage(chatId, placeholder);
     statusId = sent.message_id;
   } catch {}
@@ -152,7 +170,7 @@ async function startDraft(userId, chatId, mode, topic) {
       return statusId ? editMsg(chatId, statusId, txt, false, userId) : notify(userId, txt);
     }
 
-    const content = await buildDraft(userId, mode, topic);
+    const content = await buildDraft(userId, mode, topic, withMedia);
     if (!content) {
       const txt = mode === "thread"
         ? "Thread üretilemedi, tekrar dene."
@@ -317,12 +335,19 @@ bot.on("message", async (msg) => {
     if (!msg.text) return;
     const txt = msg.text.trim();
 
+    if (txt.startsWith("/tweet_img")) {
+      const topic = txt.replace(/^\/tweet_img(?:@\w+)?/, "").trim() || null;
+      return startDraft(userId, msg.chat.id, "manual", topic, true);
+    }
     if (txt.startsWith("/tweet")) {
       const topic = txt.replace(/^\/tweet(?:@\w+)?/, "").trim() || null;
-      return startDraft(userId, msg.chat.id, "manual", topic);
+      return startDraft(userId, msg.chat.id, "manual", topic, false);
+    }
+    if (txt.startsWith("/trend_img")) {
+      return startDraft(userId, msg.chat.id, "trend", null, true);
     }
     if (txt.startsWith("/trend")) {
-      return startDraft(userId, msg.chat.id, "trend", null);
+      return startDraft(userId, msg.chat.id, "trend", null, false);
     }
     if (txt.startsWith("/thread")) {
       const topic = txt.replace(/^\/thread(?:@\w+)?/, "").trim() || null;

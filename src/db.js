@@ -36,6 +36,8 @@ db.exec(`
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     email         TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user',
+    plan_id       TEXT NOT NULL DEFAULT 'free',
     created_at    TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS user_platforms (
@@ -65,11 +67,15 @@ try { db.exec("ALTER TABLE pending ADD COLUMN platform TEXT NOT NULL DEFAULT 'x'
 try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1"); } catch (e) {}
 try { db.exec("ALTER TABLE pending ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1"); } catch (e) {}
 
+// Multi-tier migration: ensure 'role' and 'plan_id' columns exist
+try { db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); } catch (e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN plan_id TEXT NOT NULL DEFAULT 'free'"); } catch (e) {}
+
 // Seed the first user if empty and migrate meta
 const userCount = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
 if (userCount === 0) {
   const hash = require("crypto").createHash("sha256").update(process.env.DASHBOARD_PASSWORD || "admin").digest("hex");
-  db.prepare("INSERT INTO users (id, email, password_hash, created_at) VALUES (1, ?, ?, ?)").run(
+  db.prepare("INSERT INTO users (id, email, password_hash, role, plan_id, created_at) VALUES (1, ?, ?, 'admin', 'premium', ?)").run(
     process.env.DASHBOARD_EMAIL || "admin", 
     hash, 
     new Date().toISOString()
@@ -81,6 +87,9 @@ if (userCount === 0) {
       db.prepare("INSERT OR REPLACE INTO user_meta (user_id, key, value) VALUES (1, ?, ?)").run(r.key, r.value);
     }
   } catch(e) {}
+} else {
+  // Ensure user 1 is admin and premium
+  db.prepare("UPDATE users SET role = 'admin', plan_id = 'premium' WHERE id = 1").run();
 }
 
 const localDate = () => {
@@ -237,6 +246,10 @@ const createUser = (email, passwordHash) => {
   return res.lastInsertRowid;
 };
 const getAllUsers = () => db.prepare("SELECT id FROM users").all();
+const getAllUsersDetails = () => db.prepare("SELECT id, email, role, plan_id, created_at FROM users ORDER BY id ASC").all();
+const updateUserPlan = (userId, planId) => {
+  db.prepare("UPDATE users SET plan_id = ? WHERE id = ?").run(planId, userId);
+};
 const getUserPlatforms = (userId) => db.prepare("SELECT * FROM user_platforms WHERE user_id = ?").all(userId);
 const setUserPlatform = (userId, platformId, accessToken, refreshToken, username) => {
   db.prepare(
@@ -265,6 +278,8 @@ module.exports = {
   getUserByTgChat,
   createUser,
   getAllUsers,
+  getAllUsersDetails,
+  updateUserPlan,
   getUserPlatforms,
   setUserPlatform,
 };

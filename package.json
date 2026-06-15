@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "axios": "^1.18.0",
     "dotenv": "^16.4.0",
     "express": "^5.2.1",
     "node-cron": "^3.0.3",
     "node-telegram-bot-api": "^0.66.0",
+    "openai": "^6.42.0",
     "twitter-api-v2": "^1.18.0"
   }
 }

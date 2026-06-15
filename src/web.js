@@ -104,13 +104,18 @@ function buildApp() {
 
   app.get("/api/stats", (req, res) => {
     const config = getSettings(req.userId);
+    const subscription = require("./subscription");
+    const sub = subscription.checkLimits(req.userId, config);
     res.json({
       model: config.model,
       paused: db.getMeta(req.userId, "paused") === "1",
-      activePlatforms: config.activePlatforms || ["x"],
+      activePlatforms: sub.activePlatforms,
+      role: db.getUserById(req.userId).role,
+      plan: sub.planId,
+      canUseMedia: sub.canUseMedia,
       tweets: { 
         today: db.countToday(req.userId, "tweet"), 
-        max: config.maxTweetsPerDay,
+        max: sub.maxTweetsPerDay,
         byPlatform: db.countTodayByPlatform(req.userId, "tweet")
       },
       replies: { 
@@ -137,7 +142,7 @@ function buildApp() {
     const config = getSettings(req.userId);
     const platformsDb = db.getUserPlatforms(req.userId);
     const pm = Object.fromEntries(platformsDb.map(p => [p.platform_id, p]));
-    res.json({ ok: true, data: config._getRaw(), platforms: { x: pm.x || {}, threads: pm.threads || {} } });
+    res.json({ ok: true, data: config._getRaw(), platforms: { x: pm.x || {}, threads: pm.threads || {}, instagram: pm.instagram || {} } });
   });
 
   app.post("/api/settings", (req, res) => {
@@ -152,6 +157,9 @@ function buildApp() {
       if (p.threads && (p.threads.access_token || p.threads.username)) {
         db.setUserPlatform(req.userId, "threads", p.threads.access_token || "", p.threads.refresh_token || "", p.threads.username || "");
       }
+      if (p.instagram && (p.instagram.access_token || p.instagram.username)) {
+        db.setUserPlatform(req.userId, "instagram", p.instagram.access_token || "", p.instagram.refresh_token || "", p.instagram.username || "");
+      }
       
       const scheduler = require("./scheduler");
       scheduler.startUser(req.userId);
@@ -164,9 +172,20 @@ function buildApp() {
   app.post("/api/generate", async (req, res) => {
     const mode = (req.body && req.body.mode) || "";
     const topic = req.body && req.body.topic ? String(req.body.topic).trim() : null;
+    const withMedia = req.body && req.body.withMedia;
+    
+    if (withMedia) {
+      const sub = require("./subscription").checkLimits(req.userId, getSettings(req.userId));
+      if (!sub.canUseMedia) {
+        return res.status(403).json({ ok: false, error: "Görsel üretimi Premium pakete özeldir." });
+      }
+    }
+    
     if (!MODES.has(mode)) return res.status(400).json({ ok: false, error: "Geçersiz mod" });
     try {
-      const content = await compose.generateContent(req.userId, mode, topic || null);
+      const content = withMedia 
+        ? await compose.generateContentWithMedia(req.userId, mode, topic || null)
+        : await compose.generateContent(req.userId, mode, topic || null);
       if (!content) {
         return res.json({
           ok: false,
@@ -218,6 +237,32 @@ function buildApp() {
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
+  });
+  
+  // ADMIN ROUTES
+  app.get("/api/admin/users", (req, res) => {
+    const u = db.getUserById(req.userId);
+    if (!u || u.role !== "admin") return res.status(403).json({ ok: false, error: "Yetkisiz erişim" });
+    const users = db.getAllUsersDetails().map(user => {
+      const sub = require("./subscription").getUserLimits(user.id);
+      return {
+        id: user.id, email: user.email, role: user.role, plan: user.plan_id,
+        createdAt: user.created_at,
+        tweetsToday: db.countToday(user.id, "tweet")
+      };
+    });
+    res.json({ ok: true, users });
+  });
+
+  app.post("/api/admin/users/:id/plan", (req, res) => {
+    const u = db.getUserById(req.userId);
+    if (!u || u.role !== "admin") return res.status(403).json({ ok: false, error: "Yetkisiz erişim" });
+    const targetId = Number(req.params.id);
+    const newPlan = req.body && req.body.plan;
+    if (!["free", "pro", "premium"].includes(newPlan)) return res.status(400).json({ ok: false, error: "Geçersiz paket" });
+    
+    db.updateUserPlan(targetId, newPlan);
+    res.json({ ok: true });
   });
 
   app.get("/", (_req, res) => res.type("html").send(PAGE));
@@ -303,6 +348,7 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
   <div style="margin-top:8px;margin-bottom:8px;"><label class="muted">Aktif Platformlar (Eşzamanlı Gönderim)</label>
     <div><label><input id="set_platform_x" type="checkbox" /> X (Twitter)</label></div>
     <div><label><input id="set_platform_threads" type="checkbox" /> Threads</label></div>
+    <div><label><input id="set_platform_instagram" type="checkbox" /> Instagram (Resim/Reels Zorunlu)</label></div>
   </div>
   
   <h2>Platform Bağlantıları</h2>
@@ -312,15 +358,22 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
   <div style="margin-top:10px"><label class="muted">Threads Kullanıcı ID</label><br><input id="set_threads_user" /></div>
   <div><label class="muted">Threads Access Token</label><br><input id="set_threads_token" type="password" /></div>
   
+  <div style="margin-top:10px"><label class="muted">Instagram Hesap ID (Graph API)</label><br><input id="set_instagram_user" /></div>
+  <div><label class="muted">Instagram Access Token</label><br><input id="set_instagram_token" type="password" /></div>
+  
   <h2>Bot Ayarları</h2>
   <div><label class="muted">Telegram Chat ID (Bildirimler için)</label><br><input id="set_tg_chat" /></div>
-  <div><label class="muted">Model (örn: claude-sonnet-4-6)</label><br><input id="set_model" /></div>
+  <div><label class="muted">Model (örn: claude-3-5-sonnet-latest)</label><br><input id="set_model" /></div>
   <div><label class="muted">Günlük Maksimum Tweet</label><br><input id="set_maxTweetsPerDay" type="number" /></div>
   <div><label class="muted">Günlük Maksimum Cevap</label><br><input id="set_maxRepliesPerDay" type="number" /></div>
   <div><label class="muted">Hesap Hedefi (accountGoal)</label><br><textarea id="set_accountGoal" rows="3"></textarea></div>
   <div><label class="muted">Persona</label><br><textarea id="set_persona" rows="6"></textarea></div>
   
-  <div style="margin-top:8px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
+  <h2>Medya (Görsel/Video) Ayarları</h2>
+  <div><label class="muted">OpenAI API Key (DALL-E 3 Görsel Üretimi İçin)</label><br><input id="set_openai_key" type="password" /></div>
+  <div style="margin-top:8px"><label><input id="set_autoGenerateMedia" type="checkbox" /> Tüm gönderilerde otomatik görsel üret</label></div>
+
+  <div style="margin-top:16px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
   <div><label><input id="set_trendsEnabled" type="checkbox" /> Trendlere Katıl (trendsEnabled)</label></div>
   <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap</label></div>
   
@@ -328,14 +381,39 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em
 </div>
 </div>
 
+<div id="adminView" class="hidden">
+  <div class="row"><h1>👑 Yönetim Paneli</h1><span class="sp"></span><button id="closeAdminBtn" class="ghost">← Geri</button></div>
+  <p class="muted">Sisteme kayıtlı tüm kullanıcıları ve abonelik paketlerini buradan yönetebilirsiniz.</p>
+  <div class="card">
+    <table id="adminUsersTable" style="width:100%; text-align:left; border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--bd);">
+          <th style="padding:8px">ID</th><th style="padding:8px">Email</th><th style="padding:8px">Rol</th>
+          <th style="padding:8px">Bugün Tweet</th><th style="padding:8px">Paket</th><th style="padding:8px">İşlem</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
 </div>
 <script>
 const $=s=>document.querySelector(s);
 const api=(p,o)=>fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o));
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const show=id=>{$('#auth').classList.toggle('hidden',id!=='auth');$('#dash').classList.toggle('hidden',id!=='dash');$('#settingsView').classList.toggle('hidden',id!=='settings');};
+const show=id=>{
+  $('#auth').classList.toggle('hidden',id!=='auth');
+  $('#dash').classList.toggle('hidden',id!=='dash');
+  $('#settingsView').classList.toggle('hidden',id!=='settings');
+  $('#adminView').classList.toggle('hidden',id!=='admin');
+};
 let draft=null;
-function renderContent(c){return c.parts?c.parts.map((p,i)=>(i+1)+'. '+esc(p)).join('\\n\\n'):esc(c.text);}
+function renderContent(c){
+  let html = c.parts?c.parts.map((p,i)=>(i+1)+'. '+esc(p)).join('\\n\\n'):esc(c.text);
+  if (c.mediaUrl) html += '<br><br><img src="'+esc(c.mediaUrl)+'" style="max-width:100%; border-radius:8px;" />';
+  return html;
+}
 
 async function load(){
   if(!$('#dash').classList.contains('hidden') || !$('#settingsView').classList.contains('hidden')) {} else return;
@@ -343,7 +421,7 @@ async function load(){
   if(r.status===401){show('auth');return;}
   const s=await r.json();
   if(!$('#dash').classList.contains('hidden')) {
-    $('#model').textContent=s.model;
+    $('#model').textContent=s.model + ' (' + s.plan.toUpperCase() + ')';
     const formatStats = (d) => {
       let str = d.today + ' / ' + d.max;
       if (d.byPlatform && Object.keys(d.byPlatform).length) {
@@ -355,26 +433,55 @@ async function load(){
     $('#rp').innerHTML=formatStats(s.replies);
     const st=$('#status');st.textContent=s.paused?'duraklatılmış':'aktif';st.className='badge '+(s.paused?'warn':'ok');
     $('#pauseBtn').disabled=s.paused;$('#resumeBtn').disabled=!s.paused;
+    
+    // UI limits based on subscription
+    const imgBtn = document.getElementById('btnImg');
+    if (imgBtn) {
+      if (!s.canUseMedia) {
+        imgBtn.disabled = true;
+        imgBtn.title = "Görsel üretimi Premium pakete özeldir.";
+      } else {
+        imgBtn.disabled = false;
+        imgBtn.title = "";
+      }
+    }
+
+    if (s.role === 'admin' && !document.getElementById('adminPanelBtn')) {
+      const btn = document.createElement('button');
+      btn.id = 'adminPanelBtn';
+      btn.className = 'ghost';
+      btn.textContent = '👑 Admin Paneli';
+      btn.onclick = () => { loadAdmin(); show('admin'); };
+      $('#resumeBtn').parentNode.insertBefore(btn, $('#settingsBtn'));
+    }
+
     const [pa,ac]=await Promise.all([api('/api/pending').then(x=>x.json()),api('/api/activity').then(x=>x.json())]);
-    $('#pending').innerHTML=pa.pending.length?pa.pending.map(p=>'<div class="item"><div class="meta">['+(p.platform==='threads'?'Threads':'X')+'] @'+esc(p.author)+'</div>'+esc(p.mention_text)+'<div class="muted pre" style="margin-top:6px">🤖 '+esc(p.draft)+'</div><div class="row" style="margin-top:8px"><button data-id="'+p.id+'" data-act="approve">✅ Gönder</button><button class="ghost" data-id="'+p.id+'" data-act="reject">❌ Geç</button></div></div>').join(''):'<div class="muted">Bekleyen yok.</div>';
+    $('#pending').innerHTML=pa.pending.length?pa.pending.map(p=>'<div class="item"><div class="meta">['+(p.platform||'X')+'] @'+esc(p.author)+'</div>'+esc(p.mention_text)+'<div class="muted pre" style="margin-top:6px">🤖 '+esc(p.draft)+'</div><div class="row" style="margin-top:8px"><button data-id="'+p.id+'" data-act="approve">✅ Gönder</button><button class="ghost" data-id="'+p.id+'" data-act="reject">❌ Geç</button></div></div>').join(''):'<div class="muted">Bekleyen yok.</div>';
     document.querySelectorAll('#pending button[data-id]').forEach(b=>{b.onclick=()=>act(Number(b.dataset.id),b.dataset.act);});
-    $('#activity').innerHTML=ac.posts.length?ac.posts.map(p=>'<div class="item"><div class="meta">['+(p.platform==='threads'?'Threads':'X')+'] '+(p.kind==='tweet'?'📤 tweet':'💬 cevap')+' · '+new Date(p.at).toLocaleString('tr-TR')+'</div>'+esc(p.text)+'</div>').join(''):'<div class="muted">Henüz yok.</div>';
+    $('#activity').innerHTML=ac.posts.length?ac.posts.map(p=>'<div class="item"><div class="meta">['+(p.platform||'X')+'] '+(p.kind==='tweet'?'📤 gönderi':'💬 cevap')+' · '+new Date(p.at).toLocaleString('tr-TR')+'</div>'+esc(p.text)+'</div>').join(''):'<div class="muted">Henüz yok.</div>';
   }
 }
 window.act=async(id,action)=>{const r=await api('/api/pending/'+id,{method:'POST',body:JSON.stringify({action})});const j=await r.json();if(!j.ok)alert(j.error||'Hata');load();};
 
-async function generate(){
+async function generate(withMedia=false){
   $('#genErr').textContent='';$('#preview').classList.add('hidden');draft=null;
   $('#genBtn').disabled=true;$('#genBtn').textContent='Üretiliyor...';
   try{
-    const r=await api('/api/generate',{method:'POST',body:JSON.stringify({mode:$('#mode').value,topic:$('#topic').value})});
+    const r=await api('/api/generate',{method:'POST',body:JSON.stringify({mode:$('#mode').value,topic:$('#topic').value,withMedia})});
     const j=await r.json();
     if(!j.ok){$('#genErr').textContent=j.error||'Üretilemedi.';return;}
     draft=j.content;$('#previewBody').innerHTML=renderContent(draft);$('#preview').classList.remove('hidden');
   }catch(e){$('#genErr').textContent='Hata: '+e.message;}
   finally{$('#genBtn').disabled=false;$('#genBtn').textContent='Üret';}
 }
-$('#genBtn').onclick=generate;$('#regenBtn').onclick=generate;
+$('#genBtn').onclick=()=>generate(false);
+const btnImg = document.createElement('button');
+btnImg.id = 'btnImg';
+btnImg.textContent = '🖼️ Görselli Üret';
+btnImg.style.marginLeft = '8px';
+btnImg.onclick = () => generate(true);
+$('#genBtn').parentNode.appendChild(btnImg);
+$('#regenBtn').onclick=()=>generate(!!(draft && draft.mediaUrl));
 $('#cancelBtn').onclick=()=>{$('#preview').classList.add('hidden');draft=null;};
 $('#sendBtn').onclick=async()=>{
   if(!draft)return;$('#sendBtn').disabled=true;
@@ -397,6 +504,7 @@ async function loadSettings() {
   const active = get('activePlatforms') || [];
   $('#set_platform_x').checked = active.includes('x');
   $('#set_platform_threads').checked = active.includes('threads');
+  $('#set_platform_instagram').checked = active.includes('instagram');
   
   $('#set_model').value = get('model') || '';
   $('#set_maxTweetsPerDay').value = get('maxTweetsPerDay') || '';
@@ -404,21 +512,56 @@ async function loadSettings() {
   $('#set_accountGoal').value = get('accountGoal') || '';
   $('#set_persona').value = get('persona') || '';
   $('#set_tg_chat').value = get('telegramChatId') || '';
+  $('#set_openai_key').value = get('openAiApiKey') || '';
   
+  $('#set_autoGenerateMedia').checked = !!get('autoGenerateMedia');
   $('#set_refineTweets').checked = !!get('refineTweets');
   $('#set_trendsEnabled').checked = !!get('trendsEnabled');
   $('#set_autoReplySafeMentions').checked = !!get('autoReplySafeMentions');
   
   const x = j.platforms.x || {};
   const t = j.platforms.threads || {};
+  const ig = j.platforms.instagram || {};
   $('#set_x_token').value = x.access_token || '';
   $('#set_x_secret').value = x.refresh_token || '';
   $('#set_threads_user').value = t.username || '';
   $('#set_threads_token').value = t.access_token || '';
+  $('#set_instagram_user').value = ig.username || '';
+  $('#set_instagram_token').value = ig.access_token || '';
 }
 
 $('#settingsBtn').onclick = () => { loadSettings(); show('settings'); };
 $('#closeSettingsBtn').onclick = () => { load(); show('dash'); };
+$('#closeAdminBtn').onclick = () => { load(); show('dash'); };
+
+async function loadAdmin() {
+  const r = await api('/api/admin/users');
+  const j = await r.json();
+  if (!j.ok) return alert(j.error);
+  const tb = $('#adminUsersTable tbody');
+  tb.innerHTML = j.users.map(u => 
+    '<tr style="border-bottom:1px solid var(--bd);"><td style="padding:8px">'+u.id+'</td>'+
+    '<td style="padding:8px">'+esc(u.email)+'</td>'+
+    '<td style="padding:8px"><span class="badge '+(u.role==='admin'?'warn':'ok')+'">'+u.role+'</span></td>'+
+    '<td style="padding:8px">'+u.tweetsToday+'</td>'+
+    '<td style="padding:8px">'+
+      '<select id="plan_'+u.id+'">'+
+        '<option value="free" '+(u.plan==='free'?'selected':'')+'>Free</option>'+
+        '<option value="pro" '+(u.plan==='pro'?'selected':'')+'>Pro</option>'+
+        '<option value="premium" '+(u.plan==='premium'?'selected':'')+'>Premium</option>'+
+      '</select>'+
+    '</td>'+
+    '<td style="padding:8px"><button onclick="updatePlan('+u.id+')">Ayarla</button></td></tr>'
+  ).join('');
+}
+
+window.updatePlan = async (id) => {
+  const plan = $('#plan_'+id).value;
+  const r = await api('/api/admin/users/'+id+'/plan', { method: 'POST', body: JSON.stringify({ plan }) });
+  const j = await r.json();
+  if (j.ok) alert('Kullanıcı planı güncellendi: ' + plan.toUpperCase());
+  else alert('Hata: ' + j.error);
+};
 
 $('#saveSettingsBtn').onclick = async () => {
   $('#saveSettingsBtn').disabled = true;
@@ -428,6 +571,7 @@ $('#saveSettingsBtn').onclick = async () => {
   const active = [];
   if ($('#set_platform_x').checked) active.push('x');
   if ($('#set_platform_threads').checked) active.push('threads');
+  if ($('#set_platform_instagram').checked) active.push('instagram');
   cPayload.activePlatforms = JSON.stringify(active) === JSON.stringify(currentSettings.defaults.activePlatforms) ? null : active;
   
   const vStr = (id, k) => { 
@@ -449,6 +593,8 @@ $('#saveSettingsBtn').onclick = async () => {
   vStr('set_accountGoal', 'accountGoal');
   vStr('set_persona', 'persona');
   vStr('set_tg_chat', 'telegramChatId');
+  vStr('set_openai_key', 'openAiApiKey');
+  vBool('set_autoGenerateMedia', 'autoGenerateMedia');
   vBool('set_refineTweets', 'refineTweets');
   vBool('set_trendsEnabled', 'trendsEnabled');
   vBool('set_autoReplySafeMentions', 'autoReplySafeMentions');
@@ -463,6 +609,10 @@ $('#saveSettingsBtn').onclick = async () => {
       threads: {
         username: $('#set_threads_user').value,
         access_token: $('#set_threads_token').value
+      },
+      instagram: {
+        username: $('#set_instagram_user').value,
+        access_token: $('#set_instagram_token').value
       }
     }
   };
