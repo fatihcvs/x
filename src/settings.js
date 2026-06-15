@@ -1,7 +1,7 @@
 const db = require("./db");
 
 const DEFAULT_CONFIG = {
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-3-5-sonnet-20241022",
   maxTweetsPerDay: 5,
   maxRepliesPerDay: 10,
   
@@ -43,6 +43,10 @@ function getSettings(userId) {
   }
 
   const settings = { ...DEFAULT_CONFIG, ...overrides };
+
+  if (settings.model === "claude-3-5-sonnet-latest") {
+    settings.model = "claude-3-5-sonnet-20241022";
+  }
 
   settings._getRaw = () => ({ defaults: DEFAULT_CONFIG, overrides });
   settings._update = (newObj) => {
