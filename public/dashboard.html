@@ -1,104 +1,285 @@
-`<!doctype html>
-<html lang="tr"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Co-pilot Panel</title>
-<link rel='stylesheet' href='/css/dashboard.css'></head><body><div class="wrap">
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Social Copilot - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel='stylesheet' href='/css/dashboard.css'>
+</head>
+<body>
+    <div id="auth" class="hidden"></div> <!-- Placeholder for JS compatibility -->
 
-<div id="auth" class="card hidden">
-<h1>🤖 Co-pilot SaaS</h1><p class="muted">Giriş yapın veya yeni hesap oluşturun.</p>
-<div class="row"><input id="auth_email" type="email" placeholder="E-posta" /></div>
-<div class="row" style="margin-top:10px;"><input id="auth_pw" type="password" placeholder="Şifre" /></div>
-<div class="err" id="authErr" style="margin-top:5px;"></div>
-<div class="row" style="margin-top:10px;">
-  <button id="loginBtn">Giriş Yap</button>
-  <button id="registerBtn" class="ghost">Kayıt Ol</button>
-</div>
-</div>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path>
+                </svg>
+                <span>Copilot</span>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" onclick="show('dash')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    Genel Bakış
+                </a>
+                <a href="#" class="nav-item" id="settingsBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Ayarlar
+                </a>
+                <a href="#" class="nav-item" onclick="show('admin')" id="adminLink" style="display:none;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                    Yönetici Paneli
+                </a>
+            </nav>
 
-<div id="dash" class="hidden">
-<div class="row"><h1>🤖 Co-pilot</h1><span id="status" class="badge ok">aktif</span>
-<span class="sp"></span><span class="muted" id="model"></span></div>
-<div class="grid">
-<div class="card stat"><div class="n" id="tw">–</div><div class="l">Bugün tweet</div></div>
-<div class="card stat"><div class="n" id="rp">–</div><div class="l">Bugün cevap</div></div></div>
-<div class="row"><button id="pauseBtn" class="ghost">⏸️ Duraklat</button>
-<button id="resumeBtn" class="ghost">▶️ Devam</button><span class="sp"></span>
-<button id="settingsBtn" class="ghost">⚙️ Ayarlar</button>
-<button id="refreshBtn" class="ghost">↻ Yenile</button><button id="logoutBtn" class="ghost">Çıkış</button></div>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn btn-outline full-width">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    Çıkış Yap
+                </button>
+            </div>
+        </aside>
 
-<h2>Yeni içerik</h2>
-<div class="card">
-<div class="row"><select id="mode">
-<option value="manual">Tweet</option><option value="trend">Trend tweet</option><option value="thread">Thread</option>
-</select><input id="topic" placeholder="Konu (opsiyonel)" /><button id="genBtn">Üret</button></div>
-<div class="err" id="genErr"></div>
-<div id="preview" class="hidden">
-<div id="previewBody" class="item pre" style="margin-top:10px"></div>
-<div class="row" style="margin-top:8px"><button id="sendBtn">✅ Gönder</button>
-<button id="regenBtn" class="ghost">🔄 Yeniden</button><button id="cancelBtn" class="ghost">❌ İptal</button></div>
-</div></div>
+        <!-- Main Content -->
+        <main class="content">
+            <!-- 1. DASHBOARD VIEW -->
+            <div id="dash" class="view">
+                <header class="topbar">
+                    <div>
+                        <h1>Yönetim Paneli</h1>
+                        <p class="subtitle">Platform durumunuzu ve son aktiviteleri izleyin.</p>
+                    </div>
+                    <div class="actions">
+                        <span id="model" class="badge ghost">Model: -</span>
+                        <span id="status" class="badge ok">Aktif</span>
+                        <button id="pauseBtn" class="btn btn-outline">⏸️ Duraklat</button>
+                        <button id="resumeBtn" class="btn btn-outline hidden">▶️ Devam Et</button>
+                        <button id="refreshBtn" class="btn btn-primary">↻ Yenile</button>
+                    </div>
+                </header>
 
-<h2>Bekleyen mention'lar</h2><div id="pending" class="list"></div>
-<h2>Son aktivite</h2><div id="activity" class="list"></div>
-</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon twitter"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="tw">-</span>
+                            <span class="stat-label">Bugün Atılan Gönderi</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon threads"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="rp">-</span>
+                            <span class="stat-label">Bugün Verilen Yanıt</span>
+                        </div>
+                    </div>
+                </div>
 
-<div id="settingsView" class="hidden">
-<div class="row"><h1>⚙️ Ayarlar</h1><span class="sp"></span><button id="closeSettingsBtn" class="ghost">← Geri</button></div>
-<p class="muted">Aşağıdaki bilgileri doldurarak hesaplarınızı ve yapay zeka yapılandırmanızı yönetin.</p>
-<div class="card list">
-  <div style="margin-top:8px;margin-bottom:8px;"><label class="muted">Aktif Platformlar (Eşzamanlı Gönderim)</label>
-    <div><label><input id="set_platform_x" type="checkbox" /> X (Twitter)</label></div>
-    <div><label><input id="set_platform_threads" type="checkbox" /> Threads</label></div>
-    <div><label><input id="set_platform_instagram" type="checkbox" /> Instagram (Resim/Reels Zorunlu)</label></div>
-  </div>
-  
-  <h2>Platform Bağlantıları</h2>
-  <div><label class="muted">X Access Token</label><br><input id="set_x_token" /></div>
-  <div><label class="muted">X Access Secret</label><br><input id="set_x_secret" type="password" /></div>
-  
-  <div style="margin-top:10px"><label class="muted">Threads Kullanıcı ID</label><br><input id="set_threads_user" /></div>
-  <div><label class="muted">Threads Access Token</label><br><input id="set_threads_token" type="password" /></div>
-  
-  <div style="margin-top:10px"><label class="muted">Instagram Hesap ID (Graph API)</label><br><input id="set_instagram_user" /></div>
-  <div><label class="muted">Instagram Access Token</label><br><input id="set_instagram_token" type="password" /></div>
-  
-  <h2>Bot Ayarları</h2>
-  <div><label class="muted">Telegram Chat ID (Bildirimler için)</label><br><input id="set_tg_chat" /></div>
-  <div><label class="muted">Model (örn: claude-3-5-sonnet-latest)</label><br><input id="set_model" /></div>
-  <div><label class="muted">Günlük Maksimum Tweet</label><br><input id="set_maxTweetsPerDay" type="number" /></div>
-  <div><label class="muted">Günlük Maksimum Cevap</label><br><input id="set_maxRepliesPerDay" type="number" /></div>
-  <div><label class="muted">Hesap Hedefi (accountGoal)</label><br><textarea id="set_accountGoal" rows="3"></textarea></div>
-  <div><label class="muted">Persona</label><br><textarea id="set_persona" rows="6"></textarea></div>
-  
-  <h2>Medya (Görsel/Video) Ayarları</h2>
-  <div><label class="muted">OpenAI API Key (DALL-E 3 Görsel Üretimi İçin)</label><br><input id="set_openai_key" type="password" /></div>
-  <div style="margin-top:8px"><label><input id="set_autoGenerateMedia" type="checkbox" /> Tüm gönderilerde otomatik görsel üret</label></div>
+                <div class="content-grid">
+                    <!-- Create Content Area -->
+                    <div class="card composer-card">
+                        <div class="card-header">
+                            <h2>✨ AI ile İçerik Üret</h2>
+                        </div>
+                        <div class="composer-form">
+                            <div class="form-row">
+                                <select id="mode" class="input">
+                                    <option value="manual">Standart Gönderi</option>
+                                    <option value="trend">Trend Odaklı Gönderi</option>
+                                    <option value="thread">Uzun Bilgi Serisi (Thread)</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <input id="topic" class="input" placeholder="Yapay zekanın ne hakkında yazmasını istersiniz? (Opsiyonel)" />
+                            </div>
+                            <button id="genBtn" class="btn btn-primary full-width">İçerik Taslağı Oluştur</button>
+                            <div class="err" id="genErr"></div>
+                        </div>
 
-  <div style="margin-top:16px"><label><input id="set_refineTweets" type="checkbox" /> Tweet'leri Cilala (refineTweets)</label></div>
-  <div><label><input id="set_trendsEnabled" type="checkbox" /> Trendlere Katıl (trendsEnabled)</label></div>
-  <div><label><input id="set_autoReplySafeMentions" type="checkbox" /> Güvenli Mention'lara Oto-Cevap</label></div>
-  
-  <div class="row" style="margin-top:16px"><button id="saveSettingsBtn">Kaydet</button><span id="set_msg" class="muted" style="margin-left:10px;"></span></div>
-</div>
-</div>
+                        <div id="preview" class="preview-area hidden">
+                            <h3>Önizleme</h3>
+                            <div id="previewBody" class="preview-content pre"></div>
+                            <div class="preview-actions">
+                                <button id="sendBtn" class="btn btn-success">✅ Tüm Platformlara Gönder</button>
+                                <button id="regenBtn" class="btn btn-outline">🔄 Tekrar Üret</button>
+                                <button id="cancelBtn" class="btn btn-danger">❌ İptal</button>
+                            </div>
+                        </div>
+                    </div>
 
-<div id="adminView" class="hidden">
-  <div class="row"><h1>👑 Yönetim Paneli</h1><span class="sp"></span><button id="closeAdminBtn" class="ghost">← Geri</button></div>
-  <p class="muted">Sisteme kayıtlı tüm kullanıcıları ve abonelik paketlerini buradan yönetebilirsiniz.</p>
-  <div class="card">
-    <table id="adminUsersTable" style="width:100%; text-align:left; border-collapse:collapse;">
-      <thead>
-        <tr style="border-bottom:1px solid var(--bd);">
-          <th style="padding:8px">ID</th><th style="padding:8px">Email</th><th style="padding:8px">Rol</th>
-          <th style="padding:8px">Bugün Tweet</th><th style="padding:8px">Paket</th><th style="padding:8px">İşlem</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
+                    <!-- Pending Mentions Area -->
+                    <div class="card mentions-card">
+                        <div class="card-header">
+                            <h2>🔔 Bekleyen Etkileşimler</h2>
+                            <span class="badge ghost">Yanıt Bekliyor</span>
+                        </div>
+                        <div id="pending" class="list"></div>
+                    </div>
+                </div>
 
-</div>
-<script src='/js/dashboard.js'></script></body></html>`;
+                <div class="card mt-4">
+                    <div class="card-header"><h2>Son Aktiviteler</h2></div>
+                    <div id="activity" class="list activity-list"></div>
+                </div>
+            </div>
 
-module.exports = { start, buildApp }
+            <!-- 2. SETTINGS VIEW -->
+            <div id="settingsView" class="view hidden">
+                <header class="topbar">
+                    <div>
+                        <h1>⚙️ Ayarlar</h1>
+                        <p class="subtitle">Platform bağlantılarınızı ve AI kişiliğinizi özelleştirin.</p>
+                    </div>
+                    <button id="closeSettingsBtn" class="btn btn-outline">← İptal</button>
+                </header>
+
+                <div class="settings-grid">
+                    <!-- Platform Settings -->
+                    <div class="card">
+                        <h2>Bağlı Platformlar</h2>
+                        <p class="muted mb-4">İçeriklerin eşzamanlı olarak paylaşılacağı ağları seçin.</p>
+                        
+                        <div class="checkbox-group mb-4">
+                            <label class="switch-row">
+                                <input id="set_platform_x" type="checkbox" />
+                                <span>X (Twitter) Aktif</span>
+                            </label>
+                            <label class="switch-row">
+                                <input id="set_platform_threads" type="checkbox" />
+                                <span>Threads Aktif</span>
+                            </label>
+                            <label class="switch-row">
+                                <input id="set_platform_instagram" type="checkbox" />
+                                <span>Instagram Aktif (Sadece Medya)</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group"><label>X Access Token</label><input id="set_x_token" class="input" /></div>
+                        <div class="form-group"><label>X Access Secret</label><input id="set_x_secret" type="password" class="input" /></div>
+                        <hr>
+                        <div class="form-group"><label>Threads Kullanıcı ID</label><input id="set_threads_user" class="input" /></div>
+                        <div class="form-group"><label>Threads Access Token</label><input id="set_threads_token" type="password" class="input" /></div>
+                        <hr>
+                        <div class="form-group"><label>Instagram Hesap ID (Graph API)</label><input id="set_instagram_user" class="input" /></div>
+                        <div class="form-group"><label>Instagram Access Token</label><input id="set_instagram_token" type="password" class="input" /></div>
+                    </div>
+
+                    <!-- AI Profile Settings -->
+                    <div class="card">
+                        <h2>Yapay Zeka Profili</h2>
+                        
+                        <div class="form-group">
+                            <label>Telegram Chat ID (Log Bildirimleri)</label>
+                            <input id="set_tg_chat" class="input" />
+                        </div>
+                        <div class="form-group">
+                            <label>Model (Örn: claude-3-5-sonnet-latest)</label>
+                            <input id="set_model" class="input" />
+                        </div>
+                        
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Maks. Günlük Post</label>
+                                <input id="set_maxTweetsPerDay" type="number" class="input" />
+                            </div>
+                            <div class="form-group">
+                                <label>Maks. Günlük Yanıt</label>
+                                <input id="set_maxRepliesPerDay" type="number" class="input" />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Hesap Hedefi (Marka Misyonu)</label>
+                            <textarea id="set_accountGoal" rows="3" class="input"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>AI Kişiliği (Persona)</label>
+                            <textarea id="set_persona" rows="4" class="input" placeholder="Örn: Samimi, esprili, teknoloji odaklı..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Media & Features -->
+                    <div class="card">
+                        <h2>Medya ve Gelişmiş Özellikler</h2>
+                        
+                        <div class="form-group">
+                            <label>OpenAI API Key (Görsel Üretimi İçin)</label>
+                            <input id="set_openai_key" type="password" class="input" />
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <label class="switch-row">
+                                <input id="set_autoGenerateMedia" type="checkbox" />
+                                <span>Tüm gönderilerde otomatik DALL-E görseli üret</span>
+                            </label>
+                            <label class="switch-row">
+                                <input id="set_refineTweets" type="checkbox" />
+                                <span>Yazıları yayınlamadan önce cilala (Refine)</span>
+                            </label>
+                            <label class="switch-row">
+                                <input id="set_trendsEnabled" type="checkbox" />
+                                <span>Trend konularına otomatik katıl</span>
+                            </label>
+                            <label class="switch-row">
+                                <input id="set_autoReplySafeMentions" type="checkbox" />
+                                <span>Güvenli Mention'lara otonom cevap ver</span>
+                            </label>
+                        </div>
+
+                        <div class="settings-actions mt-4">
+                            <button id="saveSettingsBtn" class="btn btn-primary full-width">Ayarları Kaydet</button>
+                            <div id="set_msg" class="success-msg hidden">Kaydedildi!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. ADMIN VIEW -->
+            <div id="adminView" class="view hidden">
+                <header class="topbar">
+                    <div>
+                        <h1>👑 Super Admin Paneli</h1>
+                        <p class="subtitle">Sistemdeki kullanıcıları ve abonelikleri yönetin.</p>
+                    </div>
+                    <button id="closeAdminBtn" class="btn btn-outline">← Geri Dön</button>
+                </header>
+
+                <div class="card">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Email</th>
+                                <th>Yetki</th>
+                                <th>Post (Bugün)</th>
+                                <th>Abonelik Paketi</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Required JS -->
+    <script src="/js/dashboard.js"></script>
+    <script>
+        // Slightly tweak JS so admin link works correctly
+        const checkAdminLink = async () => {
+            try {
+                const res = await fetch('/api/admin/users');
+                const data = await res.json();
+                if (data.ok) {
+                    document.getElementById('adminLink').style.display = 'flex';
+                }
+            } catch (e) {}
+        }
+        checkAdminLink();
+    </script>
+</body>
+</html>

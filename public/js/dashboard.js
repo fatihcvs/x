@@ -6,6 +6,10 @@ const show=id=>{
   $('#dash').classList.toggle('hidden',id!=='dash');
   $('#settingsView').classList.toggle('hidden',id!=='settings');
   $('#adminView').classList.toggle('hidden',id!=='admin');
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  if (id === 'dash') document.querySelector('.nav-item[onclick="show(\\\'dash\\\')"]')?.classList.add('active');
+  if (id === 'settings') document.getElementById('settingsBtn')?.classList.add('active');
+  if (id === 'admin') document.getElementById('adminLink')?.classList.add('active');
 };
 let draft=null;
 function renderContent(c){
