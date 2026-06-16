@@ -4,6 +4,7 @@ const path = require("path");
 const { getSettings } = require("./settings");
 const db = require("./db");
 const compose = require("./compose");
+const lemonsqueezy = require("./lemonsqueezy");
 
 const SECRET = process.env.SESSION_SECRET || "dev_secret_key_123";
 const COOKIE = "sid";
@@ -44,6 +45,14 @@ const MODES = new Set(["manual", "trend", "thread"]);
 function buildApp() {
   const app = express();
   app.disable("x-powered-by");
+
+  // LemonSqueezy webhook — raw body gerekli (imza doğrulaması için), JSON parse'dan önce tanımlanmalı
+  app.post("/api/webhooks/lemonsqueezy", express.raw({ type: "application/json" }), (req, res) => {
+    req.rawBody = req.body.toString("utf8");
+    try { req.body = JSON.parse(req.rawBody); } catch { req.body = {}; }
+    lemonsqueezy.handleWebhook(req, res);
+  });
+
   app.use(express.json());
   app.use(express.static(path.join(__dirname, "../public")));
 
@@ -265,6 +274,16 @@ function buildApp() {
     
     db.updateUserPlan(targetId, newPlan);
     res.json({ ok: true });
+  });
+
+  // Checkout URL endpoint — kullanıcının kendi paketini yükseltmesi için
+  app.get("/api/checkout/:plan", (req, res) => {
+    const plan = req.params.plan;
+    if (!['pro', 'premium'].includes(plan)) return res.status(400).json({ ok: false, error: "Geçersiz paket" });
+    const user = db.getUserById(req.userId);
+    const url = lemonsqueezy.getCheckoutUrl(plan, req.userId, user ? user.email : "");
+    if (!url) return res.status(500).json({ ok: false, error: "Ödeme linki yapılandırılmamış. Lütfen admin ile iletişime geçin." });
+    res.json({ ok: true, url });
   });
 
   app.get("/dashboard", (req, res) => {

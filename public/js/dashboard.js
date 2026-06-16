@@ -49,13 +49,25 @@ async function load(){
       }
     }
 
-    if (s.role === 'admin' && !document.getElementById('adminPanelBtn')) {
-      const btn = document.createElement('button');
-      btn.id = 'adminPanelBtn';
-      btn.className = 'ghost';
-      btn.textContent = '👑 Admin Paneli';
-      btn.onclick = () => { loadAdmin(); show('admin'); };
-      $('#resumeBtn').parentNode.insertBefore(btn, $('#settingsBtn'));
+    // Show admin link in sidebar
+    if (s.role === 'admin') {
+      const adminLink = document.getElementById('adminLink');
+      if (adminLink) adminLink.style.display = 'flex';
+    }
+
+    // Upgrade card visibility based on plan
+    const upgradeCard = document.getElementById('upgradeCard');
+    if (upgradeCard) {
+      if (s.plan === 'premium') {
+        upgradeCard.classList.add('hidden');
+      } else {
+        upgradeCard.classList.remove('hidden');
+        const planBadge = document.getElementById('currentPlanBadge');
+        if (planBadge) planBadge.textContent = s.plan.toUpperCase();
+        // If already Pro, hide pro box, show only premium
+        const proBox = document.getElementById('proUpgradeBox');
+        if (proBox) proBox.classList.toggle('hidden', s.plan === 'pro');
+      }
     }
 
     const [pa,ac]=await Promise.all([api('/api/pending').then(x=>x.json()),api('/api/activity').then(x=>x.json())]);
@@ -65,6 +77,21 @@ async function load(){
   }
 }
 window.act=async(id,action)=>{const r=await api('/api/pending/'+id,{method:'POST',body:JSON.stringify({action})});const j=await r.json();if(!j.ok)alert(j.error||'Hata');load();};
+
+// LemonSqueezy Checkout
+window.upgradeCheckout = async (plan) => {
+  try {
+    const r = await api('/api/checkout/' + plan);
+    const j = await r.json();
+    if (j.ok && j.url) {
+      window.open(j.url, '_blank');
+    } else {
+      alert(j.error || 'Ödeme linki alınamadı.');
+    }
+  } catch (e) {
+    alert('Hata: ' + e.message);
+  }
+};
 
 async function generate(withMedia=false){
   $('#genErr').textContent='';$('#preview').classList.add('hidden');draft=null;
@@ -141,20 +168,21 @@ async function loadAdmin() {
   const r = await api('/api/admin/users');
   const j = await r.json();
   if (!j.ok) return alert(j.error);
-  const tb = $('#adminUsersTable tbody');
+  const tb = document.getElementById('adminUsersTableBody');
+  if (!tb) return;
   tb.innerHTML = j.users.map(u => 
-    '<tr style="border-bottom:1px solid var(--bd);"><td style="padding:8px">'+u.id+'</td>'+
-    '<td style="padding:8px">'+esc(u.email)+'</td>'+
-    '<td style="padding:8px"><span class="badge '+(u.role==='admin'?'warn':'ok')+'">'+u.role+'</span></td>'+
-    '<td style="padding:8px">'+u.tweetsToday+'</td>'+
-    '<td style="padding:8px">'+
-      '<select id="plan_'+u.id+'">'+
+    '<tr><td>'+u.id+'</td>'+
+    '<td>'+esc(u.email)+'</td>'+
+    '<td><span class="badge '+(u.role==='admin'?'warn':'ok')+'">'+u.role+'</span></td>'+
+    '<td>'+u.tweetsToday+'</td>'+
+    '<td>'+
+      '<select id="plan_'+u.id+'" class="input" style="width:auto;padding:6px 10px;">'+
         '<option value="free" '+(u.plan==='free'?'selected':'')+'>Free</option>'+
         '<option value="pro" '+(u.plan==='pro'?'selected':'')+'>Pro</option>'+
         '<option value="premium" '+(u.plan==='premium'?'selected':'')+'>Premium</option>'+
       '</select>'+
     '</td>'+
-    '<td style="padding:8px"><button onclick="updatePlan('+u.id+')">Ayarla</button></td></tr>'
+    '<td><button class="btn btn-primary" style="padding:6px 12px;font-size:13px;" onclick="updatePlan('+u.id+')">Ayarla</button></td></tr>'
   ).join('');
 }
 

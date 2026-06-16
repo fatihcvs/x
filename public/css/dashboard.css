@@ -318,3 +318,51 @@ hr { border: 0; border-top: 1px solid var(--bd); margin: 1.5rem 0; }
   border-bottom: 1px solid var(--bd);
 }
 .admin-table tr:last-child td { border-bottom: none; }
+
+/* Upgrade Card */
+.upgrade-box {
+  background: var(--sidebar);
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  position: relative;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.upgrade-box:hover {
+  transform: translateY(-2px);
+  border-color: var(--acc);
+}
+.upgrade-box.premium {
+  border-color: var(--acc);
+  background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.08));
+}
+.upgrade-box h3 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem 0;
+  color: var(--fg);
+}
+.upgrade-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem 0;
+  text-align: left;
+}
+.upgrade-features li {
+  padding: 0.35rem 0;
+  font-size: 0.9rem;
+  color: var(--mut);
+}
+.popular-badge {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: var(--acc);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

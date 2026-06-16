@@ -124,6 +124,38 @@
                     <div class="card-header"><h2>Son Aktiviteler</h2></div>
                     <div id="activity" class="list activity-list"></div>
                 </div>
+
+                <!-- Subscription Upgrade Card -->
+                <div id="upgradeCard" class="card mt-4 hidden">
+                    <div class="card-header">
+                        <h2>🚀 Paketini Yükselt</h2>
+                        <span id="currentPlanBadge" class="badge ghost">FREE</span>
+                    </div>
+                    <p class="muted mb-4">Daha fazla gönderi limiti, görsel üretimi ve çoklu platform desteği için paketini yükselt.</p>
+                    <div class="grid-2">
+                        <div id="proUpgradeBox" class="upgrade-box">
+                            <h3>Pro</h3>
+                            <ul class="upgrade-features">
+                                <li>✅ Günde 10 Gönderi</li>
+                                <li>✅ X + Threads</li>
+                                <li>✅ Telegram Bot</li>
+                                <li>❌ Görsel Üretimi</li>
+                            </ul>
+                            <button id="upgradeProBtn" class="btn btn-outline full-width" onclick="upgradeCheckout('pro')">Pro'ya Yükselt</button>
+                        </div>
+                        <div id="premiumUpgradeBox" class="upgrade-box premium">
+                            <div class="popular-badge">En Popüler</div>
+                            <h3>Premium</h3>
+                            <ul class="upgrade-features">
+                                <li>✅ Sınırsız Gönderi</li>
+                                <li>✅ Tüm Platformlar</li>
+                                <li>✅ Telegram Bot</li>
+                                <li>✅ DALL-E Görsel Üretimi</li>
+                            </ul>
+                            <button id="upgradePremiumBtn" class="btn btn-primary full-width" onclick="upgradeCheckout('premium')">Premium'a Yükselt</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 2. SETTINGS VIEW -->
