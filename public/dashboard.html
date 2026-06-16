@@ -189,14 +189,44 @@
                             </label>
                         </div>
 
-                        <div class="form-group"><label>X Access Token</label><input id="set_x_token" class="input" /></div>
-                        <div class="form-group"><label>X Access Secret</label><input id="set_x_secret" type="password" class="input" /></div>
-                        <hr>
-                        <div class="form-group"><label>Threads Kullanıcı ID</label><input id="set_threads_user" class="input" /></div>
-                        <div class="form-group"><label>Threads Access Token</label><input id="set_threads_token" type="password" class="input" /></div>
-                        <hr>
-                        <div class="form-group"><label>Instagram Hesap ID (Graph API)</label><input id="set_instagram_user" class="input" /></div>
-                        <div class="form-group"><label>Instagram Access Token</label><input id="set_instagram_token" type="password" class="input" /></div>
+                        <!-- X (Twitter) OAuth -->
+                        <div class="oauth-box">
+                            <div class="oauth-status">
+                                <div class="stat-icon twitter" style="width:32px;height:32px;padding:6px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg></div>
+                                <div>
+                                    <strong>X (Twitter)</strong>
+                                    <div id="status_x" class="text-sm muted">Bağlı değil</div>
+                                </div>
+                            </div>
+                            <button id="btn_connect_x" class="btn btn-primary" onclick="window.location.href='/auth/x'">🔗 Hesabı Bağla</button>
+                            <button id="btn_disconnect_x" class="btn btn-outline hidden" onclick="disconnectPlatform('x')">Bağlantıyı Kaldır</button>
+                        </div>
+
+                        <!-- Threads OAuth -->
+                        <div class="oauth-box">
+                            <div class="oauth-status">
+                                <div class="stat-icon threads" style="width:32px;height:32px;padding:6px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div>
+                                <div>
+                                    <strong>Threads</strong>
+                                    <div id="status_threads" class="text-sm muted">Bağlı değil</div>
+                                </div>
+                            </div>
+                            <button id="btn_connect_threads" class="btn btn-primary" onclick="window.location.href='/auth/threads'">🔗 Hesabı Bağla</button>
+                            <button id="btn_disconnect_threads" class="btn btn-outline hidden" onclick="disconnectPlatform('threads')">Bağlantıyı Kaldır</button>
+                        </div>
+
+                        <!-- Instagram OAuth -->
+                        <div class="oauth-box">
+                            <div class="oauth-status">
+                                <div class="stat-icon instagram" style="width:32px;height:32px;padding:6px;background:linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);color:white;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></div>
+                                <div>
+                                    <strong>Instagram</strong>
+                                    <div id="status_instagram" class="text-sm muted">Bağlı değil</div>
+                                </div>
+                            </div>
+                            <button id="btn_connect_instagram" class="btn btn-primary" onclick="window.location.href='/auth/instagram'">🔗 Hesabı Bağla</button>
+                            <button id="btn_disconnect_instagram" class="btn btn-outline hidden" onclick="disconnectPlatform('instagram')">Bağlantıyı Kaldır</button>
+                        </div>
                     </div>
 
                     <!-- AI Profile Settings -->

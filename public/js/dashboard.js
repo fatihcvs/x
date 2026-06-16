@@ -152,13 +152,41 @@ async function loadSettings() {
   const x = j.platforms.x || {};
   const t = j.platforms.threads || {};
   const ig = j.platforms.instagram || {};
-  $('#set_x_token').value = x.access_token || '';
-  $('#set_x_secret').value = x.refresh_token || '';
-  $('#set_threads_user').value = t.username || '';
-  $('#set_threads_token').value = t.access_token || '';
-  $('#set_instagram_user').value = ig.username || '';
-  $('#set_instagram_token').value = ig.access_token || '';
+
+  // Setup OAuth UI
+  const setOauthUI = (platform, username) => {
+    const statusEl = $('#status_' + platform);
+    const connBtn = $('#btn_connect_' + platform);
+    const discBtn = $('#btn_disconnect_' + platform);
+    
+    if (username) {
+      statusEl.innerHTML = `<span style="color:var(--ok)">Bağlı (@${username})</span>`;
+      connBtn.classList.add('hidden');
+      discBtn.classList.remove('hidden');
+    } else {
+      statusEl.innerHTML = `Bağlı değil`;
+      connBtn.classList.remove('hidden');
+      discBtn.classList.add('hidden');
+    }
+  };
+
+  setOauthUI('x', x.username || (x.access_token ? 'Eski Token' : null));
+  setOauthUI('threads', t.username);
+  setOauthUI('instagram', ig.username);
 }
+
+// Disconnect Platform
+window.disconnectPlatform = async (platform) => {
+  if (!confirm(`Gerçekten ${platform.toUpperCase()} bağlantısını kaldırmak istiyor musunuz?`)) return;
+  const r = await api('/api/disconnect/' + platform, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) {
+    alert('Bağlantı kaldırıldı.');
+    loadSettings();
+  } else {
+    alert('Hata: ' + j.error);
+  }
+};
 
 $('#settingsBtn').onclick = () => { loadSettings(); show('settings'); };
 $('#closeSettingsBtn').onclick = () => { load(); show('dash'); };
@@ -231,21 +259,7 @@ $('#saveSettingsBtn').onclick = async () => {
   vBool('set_autoReplySafeMentions', 'autoReplySafeMentions');
   
   const payload = {
-    config: cPayload,
-    platforms: {
-      x: {
-        access_token: $('#set_x_token').value,
-        refresh_token: $('#set_x_secret').value
-      },
-      threads: {
-        username: $('#set_threads_user').value,
-        access_token: $('#set_threads_token').value
-      },
-      instagram: {
-        username: $('#set_instagram_user').value,
-        access_token: $('#set_instagram_token').value
-      }
-    }
+    config: cPayload
   };
   
   const r = await api('/api/settings', { method: 'POST', body: JSON.stringify(payload) });

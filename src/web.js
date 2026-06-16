@@ -5,6 +5,7 @@ const { getSettings } = require("./settings");
 const db = require("./db");
 const compose = require("./compose");
 const lemonsqueezy = require("./lemonsqueezy");
+const oauth = require("./oauth");
 
 const SECRET = process.env.SESSION_SECRET || "dev_secret_key_123";
 const COOKIE = "sid";
@@ -297,6 +298,9 @@ function buildApp() {
     if (userId) return res.redirect("/dashboard");
     res.sendFile(path.join(__dirname, "../public/index.html"));
   });
+
+  // Mount OAuth routes
+  oauth.mountOAuthRoutes(app, validToken, cookieToken);
 
   return app;
 }
