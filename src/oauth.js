@@ -2,7 +2,10 @@
 const crypto = require("crypto");
 const db = require("./db");
 
-const BASE_URL = () => process.env.BASE_URL || "http://localhost:3000";
+const BASE_URL = () => {
+  let url = process.env.BASE_URL || "http://localhost:3000";
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+};
 
 // --- Yardımcı: state parametresini şifreleyerek userId taşıma ---
 const STATE_SECRET = () => process.env.SESSION_SECRET || "dev_secret_key_123";
@@ -251,6 +254,22 @@ function mountOAuthRoutes(app, validToken, cookieToken) {
       console.error("[oauth/x] Callback hatası:", e.message);
       res.redirect(`/dashboard?error=${encodeURIComponent(e.message)}`);
     }
+  });
+
+  // --- DEBUG ENDPOINT ---
+  app.get("/auth/debug", requireAuth, (req, res) => {
+    const clientId = process.env.X_CLIENT_ID;
+    const rawBaseUrl = process.env.BASE_URL;
+    const safeBaseUrl = BASE_URL();
+    const generatedUrl = xAuthUrl(req.userId);
+    
+    res.json({
+      "1_X_CLIENT_ID_Length": clientId ? clientId.length : 0,
+      "2_Raw_ENV_BASE_URL": rawBaseUrl,
+      "3_Safe_Parsed_BASE_URL": safeBaseUrl,
+      "4_Expected_Callback_In_Twitter_Portal": `${safeBaseUrl}/auth/x/callback`,
+      "5_Generated_Twitter_OAuth_URL": generatedUrl
+    });
   });
 
   // --- Threads ---
