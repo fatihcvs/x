@@ -63,7 +63,11 @@ function xAuthUrl(userId) {
     code_challenge_method: "S256",
   });
 
-  return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+  // X (Twitter) API'si boşlukların "+" yerine "%20" olmasını zorunlu kılar, 
+  // "+" olursa sonsuz yönlendirme (ERR_TOO_MANY_REDIRECTS) hatası verir.
+  const queryString = params.toString().replace(/\+/g, "%20");
+
+  return `https://twitter.com/i/oauth2/authorize?${queryString}`;
 }
 
 async function xCallback(code, state) {
