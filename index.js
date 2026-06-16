@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const REQUIRED = [
-  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
   "TELEGRAM_BOT_TOKEN",
 ];
 

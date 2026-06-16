@@ -1,20 +1,22 @@
-const Anthropic = require("@anthropic-ai/sdk");
+const OpenAI = require("openai");
 const { getSettings } = require("./settings");
 
-// Reads ANTHROPIC_API_KEY from the environment.
-const client = new Anthropic();
+// Reads OPENAI_API_KEY from the environment.
+const client = new OpenAI();
 
 const MAX_OUT = 1000;
 async function chat(userId, system, user) {
   const config = getSettings(userId);
-  const res = await client.messages.create({
+  const res = await client.chat.completions.create({
     model: config.model,
     max_tokens: MAX_OUT,
-    system,
-    messages: [{ role: "user", content: user }],
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
   });
-  const block = (res.content || []).find((b) => b.type === "text");
-  return (block?.text || "").trim();
+  const choice = (res.choices || [])[0];
+  return (choice?.message?.content || "").trim();
 }
 
 const HUMAN_GUIDE = `
